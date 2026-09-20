@@ -1,0 +1,85 @@
+{
+  "name": "dsh-super-novel",
+  "version": "0.1.0-alpha.1",
+  "description": "Novel-writing preset and sidebar for DeepSeek Harness.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./preset": {
+      "types": "./lib/preset/index.d.ts",
+      "default": "./lib/preset/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./typert": {
+      "types": "./lib/typert.host.d.ts",
+      "default": "./lib/typert.host.js"
+    },
+    "./remote": {
+      "types": "./lib/typert.remote-client.d.ts",
+      "default": "./lib/typert.remote-client.js"
+    },
+    "./package.json": "./package.json",
+    "./types": {
+      "types": "./lib/types.d.ts",
+      "default": "./lib/types.js"
+    }
+  },
+  "files": [
+    "lib",
+    "presets",
+    "cordis.patch.yml",
+    "README.md",
+    "PLAN.md",
+    "docs"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.host.json --noEmit",
+    "build": "tsc -p tsconfig.host.json && node scripts/build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "dev:link-harness": "node scripts/link-harness.mjs",
+    "pack:check": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-agent-presets": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-home-paths": "0.1.5-rc.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-typert-generator": "0.1.5-rc.2",
+    "@types/node": "^22.20.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^6.0.3"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
+      ]
+    }
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
+}

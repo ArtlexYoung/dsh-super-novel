@@ -1,0 +1,5 @@
+# The user explicitly enables the bundled preset through the sidebar.
+# Never replace agent-presets config, roots, or the user's default mode.
+- insert:
+    - id: dsh-super-novel
+      name: dsh-super-novel

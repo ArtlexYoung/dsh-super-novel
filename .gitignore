@@ -1,0 +1,6 @@
+node_modules/
+lib/
+.build/
+.test-output/
+*.tgz
+.DS_Store
