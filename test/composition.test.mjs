@@ -10,6 +10,16 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 const require = createRequire(import.meta.resolve('@deepseek-ai/cordis-plugin-include'))
 const yaml = require('js-yaml')
 
+test('bundle preserves custom roots, discovery flags and the author default', async () => {
+  const own = yaml.load(await readFile('cordis.patch.yml', 'utf8'), { schema: entryListSchema })
+  const config = { default: 'author-mode', roots: [{ path: '/author/presets', trust: 'user' }], includeShippedRoot: false, includeUserRoot: false }
+  const original = structuredClone(config)
+  const rows = applyEntryPatches([{ id: 'agent-presets', name: '@deepseek-ai/dsh-agent-presets', config }], own, message => assert.fail(message))
+  assert.deepEqual(rows.find(row => row.id === 'agent-presets').config, original)
+  assert.deepEqual(config, original)
+  assert.equal(rows.filter(row => row.id === 'dsh-super-novel').length, 1)
+})
+
 test('bundle composes in both orders without replacing the super-code preset config', async () => {
   const own = yaml.load(await readFile('cordis.patch.yml', 'utf8'), { schema: entryListSchema })
   const code = yaml.load(await readFile('../dsh-super-code/cordis.patch.yml', 'utf8'), { schema: entryListSchema })

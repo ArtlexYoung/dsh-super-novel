@@ -1,8 +1,12 @@
 # dsh-super-novel
 
-DeepSeek Harness 小说写作插件，预设 ID 为 `dsh-super-novel`。当前版本 `0.1.0-alpha.1` 是 P0 技术预览：提供小说写作提示词、右侧「小说工作台」和显式启用流程。
+DeepSeek Harness 小说写作插件，预设 ID 为 `dsh-super-novel`。当前版本 `0.0.1` 是 P0 技术预览：提供小说写作提示词、右侧「小说工作台」和显式启用流程。
 
 章节管理、作品存储、事实回填、独立审校和修订流程尚未实现。已完成 3 个样本、6 次调用的[真实模型提示词对照](docs/LIVE-EVAL-P0.md)，尚不能证明写作质量提升。另已完成[真实浏览器写作与截图测试](docs/BROWSER-WRITING-P0.md)：局部修订守住范围，但首稿字数和段数未达标。完整方案见 [设计](docs/DESIGN.md)，按 [实施批次](docs/IMPLEMENTATION.md) 继续推进。
+
+## npm 发布
+
+此版本为技术预览，使用 [Apache License 2.0](LICENSE)。发布步骤、验证范围与旧 alpha 迁移见 [0.0.1 发布说明](docs/RELEASE-0.0.1.md)。npm 包与 dsh-market 收录是两个独立步骤，本次只准备 npm 产物。
 
 ## 本地开发
 
@@ -47,4 +51,4 @@ npm pack
 - [计划](PLAN.md)：当前进度和下一步。
 - [P0 验证](docs/P0-VALIDATION.md)：实际检查、兼容范围和未测项。
 
-发布包已声明 `dsh.bundle.patch`、`dsh.client` 与 exports。dsh-market 目录条目在 P6 按真实功能准备；发布 owner、仓库与许可证尚未确定（当前 `UNLICENSED`），没有执行 npm 发布或市场提交。
+发布包已声明 `dsh.bundle.patch`、`dsh.client` 与 exports。dsh-market 目录条目在 P6 按真实功能准备；GitHub 仓库为 [ArtlexYoung/dsh-super-novel](https://github.com/ArtlexYoung/dsh-super-novel)，许可证为 Apache-2.0；npm 发布由维护者执行，dsh-market 收录另行提交。

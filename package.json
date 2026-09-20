@@ -1,9 +1,9 @@
 {
   "name": "dsh-super-novel",
-  "version": "0.1.0-alpha.1",
+  "version": "0.0.1",
   "description": "Novel-writing preset and sidebar for DeepSeek Harness.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
@@ -32,6 +32,10 @@
   },
   "files": [
     "lib",
+    "lib/typert.host.js",
+    "lib/typert.host.d.ts",
+    "lib/typert.remote-client.js",
+    "lib/typert.remote-client.d.ts",
     "presets",
     "cordis.patch.yml",
     "README.md",
@@ -43,7 +47,8 @@
     "build": "tsc -p tsconfig.host.json && node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
     "dev:link-harness": "node scripts/link-harness.mjs",
-    "pack:check": "npm pack --dry-run"
+    "pack:check": "npm pack --dry-run",
+    "prepack": "npm run build"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -81,5 +86,23 @@
   },
   "dependencies": {
     "zod": "^4.6.5"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "novel",
+    "writing"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ArtlexYoung/dsh-super-novel.git"
+  },
+  "homepage": "https://github.com/ArtlexYoung/dsh-super-novel#readme",
+  "bugs": {
+    "url": "https://github.com/ArtlexYoung/dsh-super-novel/issues"
   }
 }

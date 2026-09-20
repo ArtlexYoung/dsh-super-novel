@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { discoverPresets } from '@deepseek-ai/dsh-agent-presets'
 import { PresetInstaller, PRESET_ID } from '../lib/host/preset-install.js'
 const source = resolve('presets/dsh-super-novel')
+const { version } = JSON.parse(await readFile('package.json', 'utf8'))
 const anchor = pathToFileURL(resolve('package.json')).href
 async function fixture(t) {
   await mkdir('.test-output', { recursive: true })
@@ -14,7 +15,7 @@ async function fixture(t) {
   const root = join(dir, 'presets')
   const roots = [{ path: root, trust: 'user' }]
   const host = { roots, list: () => discoverPresets(roots, anchor) }
-  return { dir, root, host, installer: new PresetInstaller(host, source, '0.1.0-alpha.1') }
+  return { dir, root, host, installer: new PresetInstaller(host, source, version) }
 }
 const signal = () => new AbortController().signal
 
@@ -79,7 +80,7 @@ test('symlink roots, target directories and files are rejected', async t => {
 
 test('concurrent instances settle without overwriting, stale lock is never stolen', async t => {
   const f = await fixture(t)
-  const other = new PresetInstaller(f.host, source, '0.1.0-alpha.1')
+  const other = new PresetInstaller(f.host, source, version)
   const values = await Promise.all([f.installer.enable(signal()), other.enable(signal())])
   assert(values.some(value => value.state === 'enabled'))
   assert(values.every(value => ['busy', 'enabled'].includes(value.state)))
@@ -93,9 +94,9 @@ test('abort, read-only deployments, and shadowed identities cannot create a pres
   const f = await fixture(t)
   await assert.rejects(f.installer.enable(AbortSignal.abort()), { name: 'AbortError' })
   assert.deepEqual(await readdir(f.dir), [])
-  const readonly = new PresetInstaller({ roots: [], list: async () => [] }, source, '0.1.0-alpha.1')
+  const readonly = new PresetInstaller({ roots: [], list: async () => [] }, source, version)
   assert.equal((await readonly.enable(signal())).state, 'unavailable')
-  const shadowed = new PresetInstaller({ roots: f.host.roots, list: async () => [{ id: PRESET_ID, path: '/different/agent.cordis.yml' }] }, source, '0.1.0-alpha.1')
+  const shadowed = new PresetInstaller({ roots: f.host.roots, list: async () => [{ id: PRESET_ID, path: '/different/agent.cordis.yml' }] }, source, version)
   assert.equal((await shadowed.enable(signal())).reason, 'shadowed-id')
   assert.deepEqual(await readdir(f.dir), [])
 })
@@ -105,11 +106,11 @@ test('tilde roots match host discovery; relative roots and truncated files are e
   const { homedir } = await import('node:os')
   const { relative } = await import('node:path')
   const roots = [{ path: `~/${relative(homedir(), f.root)}`, trust: 'user' }]
-  const installer = new PresetInstaller({ roots, list: () => discoverPresets(roots, anchor) }, source, '0.1.0-alpha.1')
+  const installer = new PresetInstaller({ roots, list: () => discoverPresets(roots, anchor) }, source, version)
   assert.equal((await installer.enable(signal())).state, 'enabled')
   await writeFile(join(f.root, PRESET_ID, 'preset.yml'), 'name: par')
   assert.equal((await installer.enable(signal())).reason, 'modified-preset')
-  const ambiguous = new PresetInstaller({ roots: [{ path: './presets', trust: 'user' }], list: async () => [] }, source, '0.1.0-alpha.1')
+  const ambiguous = new PresetInstaller({ roots: [{ path: './presets', trust: 'user' }], list: async () => [] }, source, version)
   assert.equal((await ambiguous.enable(signal())).reason, 'relative-user-root')
 })
 

@@ -36,4 +36,4 @@ await build({
   banner: { js: `;(globalThis.window || globalThis).__ModuleLoader__.load({ id: 'dsh-super-novel', factory: (require) => { const exports = {}; const module = { exports };` },
   footer: { js: 'return module.exports; } });' },
 })
-console.log('Built Host, generated strict Typert/Remote, and browser closure artifact.')
+console.error('Built Host, generated strict Typert/Remote, and browser closure artifact.')
