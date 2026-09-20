@@ -2,7 +2,7 @@
 
 DeepSeek Harness 小说写作插件，预设 ID 为 `dsh-super-novel`。当前版本 `0.1.0-alpha.1` 是 P0 技术预览：提供小说写作提示词、右侧「小说工作台」和显式启用流程。
 
-章节管理、作品存储、事实回填、独立审校和修订流程尚未实现；未进行真实模型写作质量评测。完整方案见 [设计](docs/DESIGN.md)，按 [实施批次](docs/IMPLEMENTATION.md) 继续推进。
+章节管理、作品存储、事实回填、独立审校和修订流程尚未实现。已完成 3 个样本、6 次调用的[真实模型提示词对照](docs/LIVE-EVAL-P0.md)，尚不能证明写作质量提升。完整方案见 [设计](docs/DESIGN.md)，按 [实施批次](docs/IMPLEMENTATION.md) 继续推进。
 
 ## 本地开发
 
