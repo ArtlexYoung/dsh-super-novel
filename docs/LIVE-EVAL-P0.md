@@ -1,5 +1,7 @@
 # P0 真实模型小规模对照
 
+> 历史记录：保留当时的版本、环境和结果。当前使用与开发入口见[文档目录](README.md)。
+
 日期：2026-09-20。结论：真实 Harness → 模型 → 输出/事件/用量通路已验证；这三个样本不足以证明写作质量提升。token 增加本身不视为缺陷或拒收条件；本项目以写作质量为主目标，允许合理的额外消耗。当前不能宣传节省成本，也不能声称完整小说流程已经通过评测。
 
 ## 方法与版本
@@ -7,7 +9,7 @@
 参考 dsh-super-code 的 `eval/adapters/harness-super-code.mjs`、`eval/runners/dsh-runtime-smoke.mjs` 和请求用量记录方法：真实创建 Agent、挂载 preset、保留每次尝试、同一任务配对、先检查 provider。没有执行它的 SWE-bench 或照搬编程评分门槛。
 
 - 插件：`0.1.0-alpha.1`，产品代码基线 `d3d4af7`；Harness：`c291e7961a` / `0.1.5-rc.2`；macOS arm64，Node.js `24.18.1`。
-- 模型：TokenHub `deepseek-v4.1-flash`，端点 `https://tokenhub.tencentmaas.com/plan/v3`；凭证仅从 `DSH_MODEL_API_KEY` 读取。
+- 两组使用相同的开发测试模型；具体调用配置保存在本地实验记录中，不随仓库分发。
 - 两组 `reasoningEffort=high`、`maxTokens=6000`、每次超时 180 秒、无自动重试、temperature 沿用 provider 默认。不同于 super-code 历史不限输出的协议，这里限制单次输出预算。
 - 对照为普通小说助手提示词，候选真实挂载 `dsh-super-novel`，同用 Harness 核心运行时和身份提示，无工具。**不是**内置 standard/minimal 与完整产品的发布评测。
 - 首章、约束续写、局部润色三个合成样本，每组每题一次，任务顺序交替；同一素材、独立会话。无真实小说材料、文件读取、shell 或委派调用。
@@ -51,11 +53,11 @@
 
 ## 重现
 
-先按 README 构建和链接 Harness。将三个合成案例放入新的、被忽略的 `eval/<run>/cases.json`，每项包含唯一小写 `id`、`prompt`、`minHan`、`maxHan`，可选 `forbidden`、`prefix`、`suffix`、`review`。素材与领域检查项需要在执行前明确，不能将私人稿件作为默认测试材料。
+先按[开发说明](development.md)构建和链接 Harness。将三个合成案例放入新的、被忽略的 `eval/<run>/cases.json`，每项包含唯一小写 `id`、`prompt`、`minHan`、`maxHan`，可选 `forbidden`、`prefix`、`suffix`、`review`。素材与领域检查项需要在执行前明确，不能将私人稿件作为默认测试材料。
 
 ```sh
-node scripts/live-eval.mjs prepare eval/<run>
-node scripts/live-eval.mjs run eval/<run>
+node --experimental-strip-types scripts/live-eval.ts prepare eval/<run>
+node --experimental-strip-types scripts/live-eval.ts run eval/<run>
 ```
 
 `prepare` 不调用模型。`run` 会真实计费调用 provider，需要已设置密钥环境变量；不要将密钥写进命令、文件或提交。manifest 检测参数/源码漂移；已有 run-started 文件会拒绝再次执行，避免误重跑。每次会话独立、运行失败停止后续样本。原始文本仅在本地 eval 中保存，版本库只保留 runner、统计测试和此摘要。

@@ -1,0 +1,19 @@
+# Local-only planning, design, and research notes.
+PLAN.md
+MEMORY.md
+TASKS.md
+.development/
+.githooks/
+docs/DESIGN.md
+docs/IMPLEMENTATION.md
+docs/RESEARCH.md
+
+# Credentials and local environment files.
+.env
+.env.*
+*.env
+
+# Local evaluation and build output.
+eval/
+.test-output/
+.build/

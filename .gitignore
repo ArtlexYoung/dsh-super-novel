@@ -5,3 +5,30 @@ lib/
 *.tgz
 .DS_Store
 /eval/
+
+# Local plans and maintainer notes.
+PLAN.md
+MEMORY.md
+TASKS.md
+.development/
+
+# Local hooks; do not commit.
+.githooks/
+
+# Local design, planning, and research notes.
+/docs/DESIGN.md
+/docs/IMPLEMENTATION.md
+/docs/RESEARCH.md
+
+# Credentials and local environment files.
+.env
+.env.*
+*.env
+
+# Local agent instructions and specification drafts.
+AGENTS.md
+CLAUDE.md
+SPEC.md
+SPECS.md
+/docs/plans/
+/docs/specs/

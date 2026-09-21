@@ -12,11 +12,11 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { assembleContextFor } from '@deepseek-ai/dsh-agent'
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
 import { WRITING_GUIDANCE } from '../lib/preset/index.js'
-import { measureOutput, measureEvents } from './live-eval-metrics.mjs'
+import { measureOutput, measureEvents } from './live-eval-metrics.ts'
 const require = createRequire(import.meta.resolve('@deepseek-ai/cordis-plugin-include'))
 const yaml = require('js-yaml')
 const [action, inputDir = 'eval/live-p0-l1'] = process.argv.slice(2)
-assert(['prepare', 'run'].includes(action), 'Usage: node scripts/live-eval.mjs prepare|run [eval/subdirectory]')
+assert(['prepare', 'run'].includes(action), 'Usage: node --experimental-strip-types scripts/live-eval.ts prepare|run [eval/subdirectory]')
 const dir = resolve(inputDir)
 const child = relative(resolve('eval'), dir)
 assert(child && !child.startsWith('..') && !isAbsolute(child), 'Output must be below ignored eval/')
@@ -34,7 +34,7 @@ const snapshot = {
   casesSha256: sha(casesText), guidanceSha256: sha(WRITING_GUIDANCE),
   presetSha256: sha(await readFile('presets/dsh-super-novel/agent.cordis.yml')),
   runnerSha256: sha(await readFile(import.meta.filename)),
-  metricsSha256: sha(await readFile(new URL('./live-eval-metrics.mjs', import.meta.url))),
+  metricsSha256: sha(await readFile(new URL('./live-eval-metrics.ts', import.meta.url))),
 }
 const plan = {
   schema: 1, mode: 'real-harness-prompt-comparison', ...snapshot,

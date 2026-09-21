@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { measureEvents, measureOutput } from '../scripts/live-eval-metrics.mjs'
+import { measureEvents, measureOutput } from '../scripts/live-eval-metrics.ts'
 const message = (text, usage) => ({ type: 'assistant/message', data: { message: { content: [{ type: 'text', text }] }, ...(usage ? { usage } : {}) } })
 test('a truncated or empty session is not a completed generation; missing usage stays unknown', () => {
   assert.equal(measureEvents([]).completed, false)

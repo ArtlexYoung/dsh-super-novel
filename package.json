@@ -1,6 +1,6 @@
 {
   "name": "dsh-super-novel",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Novel-generation preset and sidebar for DeepSeek Harness.",
   "type": "module",
   "license": "Apache-2.0",
@@ -39,14 +39,22 @@
     "presets",
     "cordis.patch.yml",
     "README.md",
-    "PLAN.md",
-    "docs"
+    "docs/README.md",
+    "docs/usage.md",
+    "docs/development.md",
+    "docs/architecture.md",
+    "docs/evaluation.md",
+    "docs/P0-VALIDATION.md",
+    "docs/LIVE-EVAL-P0.md",
+    "docs/BROWSER-WRITING-P0.md",
+    "docs/RELEASE-0.0.1.md",
+    "docs/screenshots"
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.host.json --noEmit",
-    "build": "tsc -p tsconfig.host.json && node scripts/build.mjs",
-    "test": "node --test test/*.test.mjs",
-    "dev:link-harness": "node scripts/link-harness.mjs",
+    "build": "tsc -p tsconfig.host.json && node --experimental-strip-types scripts/build.ts",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "dev:link-harness": "node --experimental-strip-types scripts/link-harness.ts",
     "pack:check": "npm pack --dry-run",
     "prepack": "npm run build"
   },

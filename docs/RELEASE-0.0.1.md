@@ -1,5 +1,7 @@
 # 0.0.1 npm 发布说明
 
+> 历史记录：保留当时的版本、环境和结果。当前使用与开发入口见[文档目录](README.md)。
+
 首个 npm 版本为 `0.0.1`，仍是 P0 技术预览。GitHub：<https://github.com/ArtlexYoung/dsh-super-novel>。npm 包名：`dsh-super-novel`；许可证：[Apache License 2.0](../LICENSE)。npm 发布由维护者执行，GitHub 推送不等同于 npm 发布或 dsh-market 收录。
 
 ## 本版范围
@@ -24,7 +26,7 @@
 
 ## 维护者发布
 
-从仓库开发环境重新生成时，先按 README 安装依赖并链接相邻已构建 Harness，再执行：
+从仓库开发环境重新生成时，先按[开发说明](development.md)安装依赖并链接相邻已构建 Harness，再执行：
 
 ```sh
 npm run typecheck

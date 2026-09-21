@@ -31,7 +31,7 @@ await writeFile('lib/typert.host.d.ts', artifact.dts.replace(/^\/\/# sourceMappi
 await writeFile('lib/typert.remote-client.js', artifact.remote.js)
 await writeFile('lib/typert.remote-client.d.ts', artifact.remote.dts.replace(/^\/\/# sourceMappingURL=.*$/gm, ''))
 await build({
-  entryPoints: ['src/client/index.jsx'], outfile: 'lib/client.js', bundle: true,
+  entryPoints: ['src/client/index.tsx'], outfile: 'lib/client.js', bundle: true,
   format: 'cjs', platform: 'browser', target: 'es2022', external: ['react'],
   banner: { js: `;(globalThis.window || globalThis).__ModuleLoader__.load({ id: 'dsh-super-novel', factory: (require) => { const exports = {}; const module = { exports };` },
   footer: { js: 'return module.exports; } });' },

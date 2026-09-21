@@ -1,54 +1,57 @@
 # dsh-super-novel
 
-DeepSeek Harness 小说生成插件，预设 ID 为 `dsh-super-novel`。当前版本 `0.0.1` 是 P0 技术预览：提供小说生成提示词、右侧「小说生成工作台」和显式启用流程。
+DeepSeek Harness 的小说写作插件，提供小说生成预设和右侧「小说生成工作台」。
 
-章节管理、作品存储、事实回填、独立审校和修订流程尚未实现。已完成 3 个样本、6 次调用的[真实模型提示词对照](docs/LIVE-EVAL-P0.md)，尚不能证明写作质量提升。另已完成[真实浏览器写作与截图测试](docs/BROWSER-WRITING-P0.md)：局部修订守住范围，但首稿字数和段数未达标。完整方案见 [设计](docs/DESIGN.md)，按 [实施批次](docs/IMPLEMENTATION.md) 继续推进。
+## 介绍
 
-## npm 发布
+在聊天中规划故事、起草章节、续写或润色。预设会提醒模型关注人物动机、情节连续性、作者文风和修改范围；模型、权限和工具沿用 Harness 的配置。
 
-此版本为技术预览，使用 [Apache License 2.0](LICENSE)。发布步骤、验证范围与旧 alpha 迁移见 [0.0.1 发布说明](docs/RELEASE-0.0.1.md)。npm 包与 dsh-market 收录是两个独立步骤，本次只准备 npm 产物。
+当前 `0.0.2` 是技术预览：已提供写作提示词、预设启用和状态侧栏。章节管理、作品存储、自动事实回填、独立审校和修订工具尚未实现。
 
-## 本地开发
+## 安装
 
-需要 Node.js 22.19+ 或 24+，以及相邻目录已构建的 `deepseek-harness`（当前验证 `0.1.5-rc.2`、`c291e7961a`）；组合测试还读取相邻 `dsh-super-code` 的 patch。
+需要 DeepSeek Harness `0.1.5-rc.2`，Node.js `^22.19.0 || >=24.0.0`。其他宿主版本尚未验证。
+
+取得本地安装包后，在目标 profile 中安装（将路径替换为实际绝对路径）：
 
 ```sh
-npm ci --ignore-scripts --legacy-peer-deps
-npm run dev:link-harness
-npm run typecheck
-npm run build
-npm test
-npm run pack:check
-npm pack
+dsh plugin --profile web add /absolute/path/dsh-super-novel-0.0.2.tgz
 ```
 
-开发链接脚本只在本项目 `node_modules` 添加缺失链接。安装依赖后须重新运行链接脚本。正式包携带预编译 Host、Client 和官方生成的 Typert/Remote 产物；使用者不需要本地生成器。精确 prerelease peerDependencies 限定当前宿主基线，其他版本待验证。
+从源码生成安装包见[开发说明](docs/development.md)。市场收录与 npm 发布是独立流程，本说明不代表当前版本已上架。
 
-## 启用与数据位置
+## 使用
 
-将本地 tarball 安装到专用 Harness profile，并将 `dsh-super-novel` 加入该 profile 的 `dsh.profile.bundles`（遵循宿主的 profile/bundle 安装流程）。P0 尚未上架市场。隔离验证方法见 [验证记录](docs/P0-VALIDATION.md)。
+1. 打开会话，在右侧栏开始页选择「小说生成工作台」。
+2. 点击「启用小说生成模式」。
+3. 在宿主模式选择器中选择 **Super Novel · 小说生成**。列表未更新时，关闭后重新打开。
+4. 在聊天中提出写作要求，例如：
 
-打开一个会话，在右侧栏的开始页选择「小说生成工作台」，点击「启用小说生成模式」。随后在宿主模式选择器中选择 **Super Novel · 小说生成**；如果已打开的选择器未更新，关闭后重新打开。
+   > 写一段雨夜渡河的开场，用第三人称限知视角。主角左腕受伤，不能游泳；结尾停在船离岸时。
 
-插件只向宿主第一个 `trust: user` 预设根写入 `dsh-super-novel/`，默认通常是 `$DSH_HOME/.agent-presets/dsh-super-novel/`（未指定 `DSH_HOME` 时在 `~/.dsh` 下）。自定义根支持绝对路径与 `~/`；相对路径拒绝启用。bundle 不替换 roots、默认模式或其他预设。查看侧栏不创建目录，不调用模型。
+正文显示在宿主聊天中。当前侧栏只负责启用和状态显示，插件不保存作品文件。
 
-目录包含 `preset.yml`、`agent.cordis.yml` 和带版本/文件哈希的 `.dsh-super-novel.json`。插件目前不保存小说正文。
+[![小说工作台](docs/screenshots/p0-en-light.png)](docs/screenshots/p0-en-light.png)
 
-## 冲突、恢复、升级与卸载
+截图来自早期 P0 的真实 Harness Web 验证，展示启用侧栏。界面支持中英文。
 
-- 同名未归属目录、额外文件、被修改的预设或其他版本都会显示冲突，不覆盖内容。先备份整个目录，再检查差异；需要重新安装时，将旧目录移到预设根之外，之后重新启用。
-- 已归属且仅缺少文件时，可以点击「继续启用」。文件只写了一部分、归属记录损坏或目录尚无归属记录时，需要按上一项人工处理。
-- 启用使用根下 `.dsh-super-novel.lock/` 目录互斥。进程崩溃会留下锁；确认所有启用进程已退出后，只对该空锁目录执行 `rmdir`，再重新检查。不要在另一实例启用期间移除锁。
-- 本版本不自动迁移旧预设。升级前备份旧目录，检查新旧版本差异并人工移出旧预设，再启用新版本。
-- 卸载前关闭使用此模式的会话，将预设目录备份到 roots 之外，再从 profile 移除 bundle 与包。先卸载包会留下引用缺失包的预设，宿主可能标记不可用；重新安装相同版本可恢复，也可按上述方式移走残留预设。没有自动卸载钩子。
+## 效果
 
-安装锁用于协调本插件实例，不抵御其他程序同时替换文件；只检查根目录本身、目标目录与文件的符号链接，不检查所有祖先目录。磁盘写入不是跨文件事务；遇中途写入失败会保留现场供恢复。
+目前完成了小规模真实模型对照和浏览器写作测试，尚不能证明写作质量提升。
 
-## 设计与发布
+| 测试 | 结果 |
+| --- | --- |
+| 3 个样本、6 次模型任务 | 均完成；文本仍有因果说服力问题 |
+| 浏览器起草 | 要求 900–1200 字、6 段，实际 759 个汉字、13 段，未达标 |
+| 指定段落修订 | 仅目标段落变化，其余 12 段逐字保留 |
 
-- [调研](docs/RESEARCH.md)：Harness 接口、EasyNovel / Novel-1 流程与市场规范。
-- [设计](docs/DESIGN.md)：规划、写作、事实、审校与修订闭环。
-- [计划](PLAN.md)：当前进度和下一步。
-- [P0 验证](docs/P0-VALIDATION.md)：实际检查、兼容范围和未测项。
+写作质量优先，token 和耗时用于记录成本，不设必须下降的门槛。详见[评测说明](docs/evaluation.md)。
 
-发布包已声明 `dsh.bundle.patch`、`dsh.client` 与 exports。dsh-market 目录条目在 P6 按真实功能准备；GitHub 仓库为 [ArtlexYoung/dsh-super-novel](https://github.com/ArtlexYoung/dsh-super-novel)，许可证为 Apache-2.0；npm 发布由维护者执行，dsh-market 收录另行提交。
+## 文档
+
+- [文档目录](docs/README.md)
+- [使用、升级与卸载](docs/usage.md)
+- [开发与检查](docs/development.md)
+- [当前架构](docs/architecture.md)
+
+许可证：[Apache-2.0](LICENSE)。代码仓库：[ArtlexYoung/dsh-super-novel](https://github.com/ArtlexYoung/dsh-super-novel)。

@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { readFile, mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 const playwrightPath = process.env.PLAYWRIGHT_MODULE
-if (!playwrightPath) throw new Error('Set PLAYWRIGHT_MODULE to the existing Playwright index.mjs path')
+if (!playwrightPath) throw new Error('Set PLAYWRIGHT_MODULE to the existing Playwright index.ts path')
 const { chromium } = await import(pathToFileURL(resolve(playwrightPath)).href)
 const browser = await chromium.launch({ headless: true })
 const errors = []
