@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-export const inject = ['workspaceController', 'sessionController', 'sessions', 'agentPresets', 'superWrite']
+export const inject = ['workspaceController', 'sessionController', 'sessions', 'agentPresets', 'superNovel']
 export async function apply(ctx) {
   const roster = await ctx.agentPresets.list()
   const expectedDefault = roster.some(row => row.id === 'super-code') ? 'super-code' : 'standard'
@@ -10,7 +10,7 @@ export async function apply(ctx) {
   assert(!roster.some(row => row.broken))
   await writeFile('.test-output/profile-check.json', JSON.stringify({
     defaultId: ctx.agentPresets.defaultId, presets: roster.map(row => row.id),
-    setup: await ctx.superWrite.status(new AbortController().signal),
+    setup: await ctx.superNovel.status(new AbortController().signal),
   }, null, 2))
   const path = resolve('.test-output/novel-fixture')
   await mkdir(path, { recursive: true })

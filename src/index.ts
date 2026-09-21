@@ -1,4 +1,4 @@
-/** Host service and browser discovery entry for the novel-writing bundle. */
+/** Host service and browser discovery entry for the novel-generation bundle. */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
@@ -10,16 +10,16 @@ import type { PresetStatus } from './types.js'
 export type { PresetStatus } from './types.js'
 
 declare module '@deepseek-ai/cordis' {
-  interface Context { superWrite: SuperWrite }
+  interface Context { superNovel: SuperNovel }
 }
 
 /** User-initiated preset setup; it never changes the default mode or existing roots. */
-export class SuperWrite extends TypertRemoteService {
+export class SuperNovel extends TypertRemoteService {
   static inject = ['agentPresets']
   private readonly installer: PresetInstaller
 
   constructor(ctx: Context) {
-    super(ctx, 'superWrite', { namespace: 'superWrite' })
+    super(ctx, 'superNovel', { namespace: 'superNovel' })
     this.installer = new PresetInstaller(ctx.agentPresets, fileURLToPath(new URL('../presets/dsh-super-novel/', import.meta.url)), JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version)
   }
 
@@ -44,4 +44,4 @@ export class SuperWrite extends TypertRemoteService {
   }
 }
 
-export default SuperWrite
+export default SuperNovel

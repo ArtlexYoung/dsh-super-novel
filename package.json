@@ -1,7 +1,7 @@
 {
   "name": "dsh-super-novel",
   "version": "0.0.1",
-  "description": "Novel-writing preset and sidebar for DeepSeek Harness.",
+  "description": "Novel-generation preset and sidebar for DeepSeek Harness.",
   "type": "module",
   "license": "Apache-2.0",
   "main": "lib/index.js",
@@ -95,7 +95,8 @@
     "deepseek-harness",
     "dsh-plugin",
     "novel",
-    "writing"
+    "writing",
+    "generation"
   ],
   "repository": {
     "type": "git",

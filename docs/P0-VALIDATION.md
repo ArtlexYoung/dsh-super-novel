@@ -20,10 +20,10 @@
 | `npm test` | 10 项通过：真实 Loader / Agent mount、提示词作用域、两个 patch 顺序、只读查看、幂等/并发/锁、同名和用户编辑保护、缺文件恢复、直接符号链接、取消、权限失败、`~/` 与相对路径 |
 | 干净依赖构建 | 在独立暂存目录 `npm ci --ignore-scripts --legacy-peer-deps`，使用 npm 生成器包并链接已构建 Harness 后 build 通过；lockfile 不含本机路径 |
 | 打包安装 | `npm pack --dry-run --json`、`npm pack --json` 通过，tarball 解包到全新隔离 profile；`prepare-preview.mjs` / 实际 CLI Web Loader 成功装配，首次启用成功 |
-| super-code 实际组合 | 两种 bundle 顺序均在真实 Web Host 启动，roster 同时包含六个可用模式；默认值保持 `super-code`，写作模式重启后仍就绪。未执行 super-code 的模型任务 |
+| super-code 实际组合 | 两种 bundle 顺序均在真实 Web Host 启动，roster 同时包含六个可用模式；默认值保持 `super-code`，小说生成模式重启后仍就绪。未执行 super-code 的模型任务 |
 | 真实浏览器 | 首次启用成功、刷新、关闭重开、切换两个会话、中英文和明暗切换；900px 全屏视口检查、原生模式选择通过；无 pageerror，具体布局限制见下文 |
 
-初次真实 Web 验证发现动态 `remote.superWrite` 服务未声明注入，修复为先 `$mount`，再在子注入作用域注册侧栏。浏览器测试同时验证真正的 RemoteResult 解包，未用假 RPC 替代。
+初次真实 Web 验证发现动态 `remote.superNovel` 服务未声明注入，修复为先 `$mount`，再在子注入作用域注册侧栏。浏览器测试同时验证真正的 RemoteResult 解包，未用假 RPC 替代。
 
 测试 profile 的会话由 `preview-fixture.mjs` 通过宿主 API 建立，并写入固定的空 turn 起止事件使会话可见；没有提交用户 prompt，没有调用模型。测试数据在 `.test-output/`，构建暂存在 `.build/`，均被 Git 忽略。普通 Harness profile 与参考仓库未修改。共存检查在该隔离 profile 增加指向已有 `dsh-super-code` 的链接，并分别交换两个 bundle 的顺序；`preview-fixture.mjs` 对默认值与预设可用性作实际断言，输出 `.test-output/profile-check.json`。
 

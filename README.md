@@ -1,6 +1,6 @@
 # dsh-super-novel
 
-DeepSeek Harness 小说写作插件，预设 ID 为 `dsh-super-novel`。当前版本 `0.0.1` 是 P0 技术预览：提供小说写作提示词、右侧「小说工作台」和显式启用流程。
+DeepSeek Harness 小说生成插件，预设 ID 为 `dsh-super-novel`。当前版本 `0.0.1` 是 P0 技术预览：提供小说生成提示词、右侧「小说生成工作台」和显式启用流程。
 
 章节管理、作品存储、事实回填、独立审校和修订流程尚未实现。已完成 3 个样本、6 次调用的[真实模型提示词对照](docs/LIVE-EVAL-P0.md)，尚不能证明写作质量提升。另已完成[真实浏览器写作与截图测试](docs/BROWSER-WRITING-P0.md)：局部修订守住范围，但首稿字数和段数未达标。完整方案见 [设计](docs/DESIGN.md)，按 [实施批次](docs/IMPLEMENTATION.md) 继续推进。
 
@@ -28,7 +28,7 @@ npm pack
 
 将本地 tarball 安装到专用 Harness profile，并将 `dsh-super-novel` 加入该 profile 的 `dsh.profile.bundles`（遵循宿主的 profile/bundle 安装流程）。P0 尚未上架市场。隔离验证方法见 [验证记录](docs/P0-VALIDATION.md)。
 
-打开一个会话，在右侧栏的开始页选择「小说工作台」，点击「启用写作模式」。随后在宿主模式选择器中选择 **Super Write · 小说写作**；如果已打开的选择器未更新，关闭后重新打开。
+打开一个会话，在右侧栏的开始页选择「小说生成工作台」，点击「启用小说生成模式」。随后在宿主模式选择器中选择 **Super Novel · 小说生成**；如果已打开的选择器未更新，关闭后重新打开。
 
 插件只向宿主第一个 `trust: user` 预设根写入 `dsh-super-novel/`，默认通常是 `$DSH_HOME/.agent-presets/dsh-super-novel/`（未指定 `DSH_HOME` 时在 `~/.dsh` 下）。自定义根支持绝对路径与 `~/`；相对路径拒绝启用。bundle 不替换 roots、默认模式或其他预设。查看侧栏不创建目录，不调用模型。
 

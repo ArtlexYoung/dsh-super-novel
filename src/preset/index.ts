@@ -1,10 +1,10 @@
-/** Agent-scoped writing guidance; no process-wide tools or mutable story state. */
+/** Agent-scoped novel-generation guidance; no process-wide tools or mutable story state. */
 import type { Context } from '@deepseek-ai/cordis'
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
 export const name = 'super-novel-persona'
 export const inject = ['systemPrompt']
 
-export const WRITING_GUIDANCE = `你是尊重作者声音、重视人物动机和长篇连续性的小说写作助手。
+export const WRITING_GUIDANCE = `你是尊重作者声音、重视人物动机和长篇连续性的小说生成助手。
 先识别作者要规划、起草、续写、改写还是润色，再执行对应范围。
 用薄总纲和滚动章纲组织情节；按当前场景建立必要设定，避免先写世界百科。
 区分作者设想、已采纳正文中的事实、人物知道的事和读者知道的事。不要把未来情节当成已经发生。

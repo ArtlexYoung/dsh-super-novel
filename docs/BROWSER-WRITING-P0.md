@@ -6,7 +6,7 @@
 
 macOS arm64、Node.js 24.18.1、Playwright 1.61.1 / Chromium headless。从本项目构建产物打包，在新的隔离 profile 安装 tarball，运行真实 Harness Web。没有修改日常 profile、参考仓库或执行市场发布。
 
-浏览器依次打开「小说工作台」、点击启用、新建会话、选择 `Super Write · 小说写作`，通过输入框发送雨夜渡河场景，再发送局部修订。默认模型为 TokenHub `deepseek-v4.1-flash` / high，超时 180 秒、无自动重试。测试 profile 禁用自动模型标题；会话标题由首条用户消息截取，不消耗额外模型调用。设置会话的空完成事件只用于展示会话侧栏，不含生成正文。
+浏览器依次打开「小说生成工作台」、点击启用、新建会话、选择 `Super Novel · 小说生成`，通过输入框发送雨夜渡河场景，再发送局部修订。默认模型为 TokenHub `deepseek-v4.1-flash` / high，超时 180 秒、无自动重试。测试 profile 禁用自动模型标题；会话标题由首条用户消息截取，不消耗额外模型调用。设置会话的空完成事件只用于展示会话侧栏，不含生成正文。
 
 事件证据确认 `agent-preset/selected=dsh-super-novel`，系统消息含实际写作指导；两个 turn 均 completed，各一个 assistant/message，无工具、失败尝试或重试。初始 `request/header` 为 high / `maxTokens=384000`，由适配器模型配置提供；第二轮沿用配置，没有额外 header 事件。本批没有人为缩减正文输出额度；上限不代表实际生成量，也不证明已验证 provider 的最大输出能力。
 
