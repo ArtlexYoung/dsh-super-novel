@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { IconPlusOutline16, IconEditOutline16, IconRefreshOutline16, IconCheckOutline16, IconChevronUpOutline14, IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Select } from './controls.js'
+import { Button, Input, Tag, IconPlusOutline16, IconEditOutline16, IconRefreshOutline16, IconCheckOutline16, IconChevronUpOutline14, IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Proposals } from './proposals.js'
 import { ChapterRecovery, InterruptedRecovery } from './history.js'
 import { MaterialCreator } from './material-creator.js'
@@ -7,6 +8,7 @@ import { Facts } from './facts.js'
 import { Reviews } from './reviews.js'
 import { Voices } from './voices.js'
 import { Transfer } from './transfer.js'
+import { DocumentDirectory } from './document-directory.js'
 
 export function unwrap(result) {
   if (!result.ok) {
@@ -18,7 +20,7 @@ export function unwrap(result) {
 }
 
 function IconButton({ label, icon: Icon, ...props }) {
-  return <button type="button" className="sn-icon" title={label} aria-label={label} {...props}><Icon /></button>
+  return <Button size="sm" type="button" className="sn-icon" title={label} aria-label={label} {...props}><Icon /></Button>
 }
 
 function draftKey(workspace, bookId, chapterId) { return `super-novel.draft:${workspace}:${bookId}:${chapterId}` }
@@ -46,6 +48,8 @@ export function Books({ api, sessionId, t }) {
   const [refresh, setRefresh] = useState(0)
   const [selection, setSelection] = useState({ start: 0, end: 0 })
   const [documents, setDocuments] = useState('chapters')
+  const [materialKind, setMaterialKind] = useState('all')
+  const [linkedChapter, setLinkedChapter] = useState('all')
   const [preferredProposal, setPreferredProposal] = useState('')
   const [workTab, setWorkTab] = useState(() => { try { const tab = localStorage.getItem('super-novel.workTab'); return ['writing', 'references', 'assessment', 'revisions'].includes(tab) ? tab : 'writing' } catch { return 'writing' } }), [search, setSearch] = useState(''), [directoryPage, setDirectoryPage] = useState(0)
   useEffect(() => { try { localStorage.setItem('super-novel.workTab', workTab) } catch {} }, [workTab])
@@ -60,8 +64,9 @@ export function Books({ api, sessionId, t }) {
   const currentChapter = book?.chapters.find(item => item.chapterId === chapterId)
   const planning = currentChapter?.kind && currentChapter.kind !== 'chapter'
   const visible = book?.chapters.filter(item => documents === 'chapters' ? !item.kind || item.kind === 'chapter' : item.kind && item.kind !== 'chapter' && item.kind !== 'facts' && item.kind !== 'voice') ?? []
-  const filtered = visible.filter(item => item.title.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
-  useEffect(() => setDirectoryPage(0), [search, bookId, documents])
+  const clearFilters = () => { setSearch(''); setMaterialKind('all'); setLinkedChapter('all'); setDirectoryPage(0) }
+  useEffect(() => setDirectoryPage(0), [search, materialKind, linkedChapter, bookId, documents])
+  useEffect(clearFilters, [bookId, documents])
   const dirty = entry && (entry.content !== entry.diskContent || entry.externallyModified)
   const stale = entry && (entry.bookRevision !== book?.revision || entry.baseHash !== entry.diskHash)
   const entryKey = entry && draftKey(library.workspaceId, bookId, chapterId)
@@ -161,7 +166,7 @@ export function Books({ api, sessionId, t }) {
       setNotice('saved')
     }
     applyBook(value)
-    if (actionName === 'create') { setChapterId(request.chapterId); setChapterTitle('') }
+    if (actionName === 'create') { setChapterId(request.chapterId); setChapterTitle(''); clearFilters() }
   })
 
   const readDisk = () => {
@@ -179,65 +184,66 @@ export function Books({ api, sessionId, t }) {
   const proposals = entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} preferredProposal={preferredProposal} adopted={() => setRefresh(value => value + 1)} />
 
   return <section className="sn-books" aria-label={t('intro')}>
+    <div className="sn-library">
     <header className="sn-toolbar"><h2>{t('title')}</h2><IconButton label={t('refresh')} icon={IconRefreshOutline16} disabled={busy} onClick={() => setRefresh(value => value + 1)} /></header>
     {error && <p role="alert" className="sn-alert">{t(error)}</p>}
     {!library && !error && <p role="status">{t('loading')}</p>}
     {library && <>
       <div className="sn-workspace">{library.workspace}</div>
       {!library.writable && <p role="status">{t('readOnly')}</p>}
-      <label className="sn-field">{t('book')}<select aria-label={t('book')} value={bookId} disabled={busy} onChange={event => { setBookId(event.target.value); setChapterId(''); setError('') }}>
+      <label className="sn-field">{t('book')}<Select aria-label={t('book')} value={bookId} disabled={busy} onChange={event => { setBookId(event.target.value); setChapterId(''); setError('') }}>
         {!library.books.length && <option value="">{t('noBooks')}</option>}
         {library.books.map(item => <option key={item.bookId} value={item.bookId}>{item.title}</option>)}
-      </select></label>
+      </Select></label>
       <form className="sn-row" onSubmit={event => { event.preventDefault(); action(async signal => {
         const key = `create:${bookTitle.trim()}`
         if (!requestIds.current.has(key)) requestIds.current.set(key, crypto.randomUUID())
         const value = unwrap(await api.createBook(sessionId, { title: bookTitle, operationId: requestIds.current.get(key) }, signal))
         applyBook(value); setChapterId(''); setBookTitle(''); requestIds.current.delete(key)
       }) }}>
-        <input aria-label={t('bookTitle')} placeholder={t('bookTitle')} maxLength={200} value={bookTitle} disabled={busy || !library.writable} onChange={event => setBookTitle(event.target.value)} />
+        <Input className="sn-input" aria-label={t('bookTitle')} placeholder={t('bookTitle')} maxLength={200} value={bookTitle} disabled={busy || !library.writable} onChange={event => setBookTitle(event.target.value)} />
         <IconButton label={t('createBook')} icon={IconPlusOutline16} type="submit" disabled={busy || !library.writable || !bookTitle.trim()} />
       </form>
-      <Transfer api={api} sessionId={sessionId} book={book} writable={library.writable && !busy} t={t} imported={value => { applyBook(value); setChapterId(value.chapters[0]?.chapterId ?? ''); setDocuments('chapters'); setWorkTab('writing') }} />
-      {book?.recoveryRequired && <button disabled={busy || !library.writable} onClick={() => action(async signal => applyBook(unwrap(await api.recoverBook(sessionId, bookId, signal))))}>{t('recover')}</button>}
+      <Transfer api={api} sessionId={sessionId} book={book} writable={library.writable && !busy} t={t} imported={value => { applyBook(value); setChapterId(value.chapters[0]?.chapterId ?? ''); setDocuments('chapters'); setWorkTab('writing'); clearFilters() }} />
+      {book?.recoveryRequired && <Button size="sm" disabled={busy || !library.writable} onClick={() => action(async signal => applyBook(unwrap(await api.recoverBook(sessionId, bookId, signal))))}>{t('recover')}</Button>}
       {book?.recoveryRequired && <InterruptedRecovery key={bookId} api={api} sessionId={sessionId} bookId={bookId} writable={library.writable && !busy} t={t} saved={applyBook} />}
-      {book && !book.recoveryRequired && <>
-        <div className="sn-modes" role="tablist" aria-label={t('documentView')}>{['chapters', 'materialsView'].map((value, index) => <button role="tab" key={value} disabled={busy} aria-selected={documents === (index ? 'materials' : 'chapters')} onClick={() => { setDocuments(index ? 'materials' : 'chapters'); setChapterId(''); setWorkTab('writing') }}>{t(value)}</button>)}</div>
-        <input type="search" aria-label={t('searchDocuments')} value={search} onChange={event => setSearch(event.target.value)} />
-        <nav className="sn-chapters" aria-label={t('chapter')}>
-          {!visible.length && <p>{t(documents === 'chapters' ? 'noChapters' : 'noMaterials')}</p>}
-          {filtered.slice(directoryPage * 100, directoryPage * 100 + 100).map((item, index) => <button key={item.chapterId} disabled={busy} aria-current={chapterId === item.chapterId ? 'true' : undefined} onClick={() => { setChapterId(item.chapterId); setError(''); setWorkTab('writing') }}><span className="sn-number">{directoryPage * 100 + index + 1}</span><span>{item.title}{item.kind && item.kind !== 'chapter' ? ` · ${t(item.kind)}` : ''}</span></button>)}
-        </nav>
-        {filtered.length > 100 && <div className="sn-row"><button aria-label={t('previousPage')} disabled={!directoryPage} onClick={() => setDirectoryPage(value => value - 1)}>&lt;</button><span>{directoryPage + 1} / {Math.ceil(filtered.length / 100)}</span><button aria-label={t('nextPage')} disabled={(directoryPage + 1) * 100 >= filtered.length} onClick={() => setDirectoryPage(value => value + 1)}>&gt;</button></div>}
-        <div hidden={documents !== 'materials'}><MaterialCreator key={bookId} api={api} sessionId={sessionId} book={book} workspaceId={library.workspaceId} writable={writable} t={t} onBusy={setBusy} created={(value, id, proposalId) => { applyBook(value); setChapterId(id); setPreferredProposal(proposalId); setWorkTab('writing'); setSearch('') }} /></div>
+    </>}
+    </div>
+    {book && !book.recoveryRequired && <div className="sn-book-workspace">
+      <DocumentDirectory book={book} chapterId={chapterId} documents={documents} busy={busy} search={search} setSearch={setSearch} kind={materialKind} setKind={setMaterialKind} linked={linkedChapter} setLinked={setLinkedChapter} page={directoryPage} setPage={setDirectoryPage} clear={clearFilters} t={t} select={id => { setChapterId(id); setError(''); setWorkTab('writing') }} switchDocuments={value => { setDocuments(value); setChapterId(''); setWorkTab('writing') }}>
         {documents === 'chapters' && <form className="sn-row" onSubmit={event => { event.preventDefault(); const key = `chapter:${bookId}:${book.revision}:${chapterTitle.trim()}`; if (!requestIds.current.has(key)) requestIds.current.set(key, crypto.randomUUID()); change('create', { chapterId: requestIds.current.get(key), title: chapterTitle }) }}>
-          <input aria-label={t('chapterTitle')} placeholder={t('chapterTitle')} value={chapterTitle} maxLength={200} disabled={!writable} onChange={event => setChapterTitle(event.target.value)} />
+          <Input className="sn-input" aria-label={t('chapterTitle')} placeholder={t('chapterTitle')} value={chapterTitle} maxLength={200} disabled={!writable} onChange={event => setChapterTitle(event.target.value)} />
           <IconButton label={t('createChapter')} icon={IconPlusOutline16} type="submit" disabled={!writable || !chapterTitle.trim()} />
         </form>}
+      </DocumentDirectory>
+      <main className="sn-document" aria-label={t('documentContent')}>
+        {currentChapter && <div className="sn-document-title"><span>{currentChapter.title}</span><Tag tone="neutral">{t(currentChapter.kind ?? 'chapter')}</Tag></div>}
+        <div hidden={documents !== 'materials'}><MaterialCreator key={bookId} api={api} sessionId={sessionId} book={book} workspaceId={library.workspaceId} writable={writable} t={t} onBusy={setBusy} created={(value, id, proposalId) => { applyBook(value); setChapterId(id); setPreferredProposal(proposalId); setWorkTab('writing'); clearFilters() }} /></div>
+        {!currentChapter && <p className="sn-notice">{t(documents === 'materials' ? 'chooseMaterial' : 'chooseChapter')}</p>}
         {currentChapter && <>
           {!planning && <div className="sn-work-tabs" role="tablist" aria-label={t('workspaceViews')} onKeyDown={event => {
             if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
             const buttons = Array.from(event.currentTarget.querySelectorAll('button')), at = buttons.indexOf(document.activeElement)
             const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (at + (event.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length
             event.preventDefault(); buttons[next].focus(); buttons[next].click()
-          }}>{['writing', 'references', 'assessment', 'revisions'].map(tab => <button role="tab" key={tab} id={`sn-tab-${tab}`} aria-controls={`sn-panel-${tab}`} aria-selected={workTab === tab} tabIndex={workTab === tab ? 0 : -1} onClick={() => setWorkTab(tab)}>{t(`tab-${tab}`)}</button>)}</div>}
+          }}>{['writing', 'references', 'assessment', 'revisions'].map(tab => <Button size="sm" role="tab" key={tab} id={`sn-tab-${tab}`} aria-controls={`sn-panel-${tab}`} aria-selected={workTab === tab} tabIndex={workTab === tab ? 0 : -1} onClick={() => setWorkTab(tab)}>{t(`tab-${tab}`)}</Button>)}</div>}
           <div id="sn-panel-writing" aria-labelledby={planning ? undefined : 'sn-tab-writing'} hidden={!planning && workTab !== 'writing'} role={planning ? undefined : 'tabpanel'}>
           {planning && <>{proposals}<h3 className="sn-material-heading">{t('savedMaterial')}</h3></>}
           <div className="sn-row">
-            <input aria-label={t('rename')} value={renameTitle} maxLength={200} disabled={!writable} onChange={event => setRenameTitle(event.target.value)} />
+            <Input className="sn-input" aria-label={t('rename')} value={renameTitle} maxLength={200} disabled={!writable} onChange={event => setRenameTitle(event.target.value)} />
             <IconButton label={t('rename')} icon={IconEditOutline16} disabled={!writable || !renameTitle.trim() || renameTitle === currentChapter.title} onClick={() => change('rename', { title: renameTitle })} />
             <IconButton label={t('moveUp')} icon={IconChevronUpOutline14} disabled={!writable || book.chapters[0].chapterId === chapterId} onClick={() => move(-1)} />
             <IconButton label={t('moveDown')} icon={IconChevronDownOutline14} disabled={!writable || book.chapters.at(-1).chapterId === chapterId} onClick={() => move(1)} />
           </div>
           <div className="sn-toolbar sn-editor-toolbar">
-            <div className="sn-modes" role="group" aria-label={t('body')}><button aria-pressed={editing} onClick={() => setEditing(true)}>{t('edit')}</button><button aria-pressed={!editing} onClick={() => setEditing(false)}>{t('preview')}</button></div>
+            <div className="sn-modes" role="group" aria-label={t('body')}><Button size="sm" aria-pressed={editing} onClick={() => setEditing(true)}>{t('edit')}</Button><Button size="sm" aria-pressed={!editing} onClick={() => setEditing(false)}>{t('preview')}</Button></div>
             <span role="status">{busy ? t('saving') : dirty ? t('unsaved') : entry ? t('saved') : t('loading')}</span>
             <IconButton label={t('save')} icon={IconCheckOutline16} disabled={!writable || !entry || !dirty || stale} onClick={() => change('save', { content: entry.content, expectedHash: entry.baseHash, expectedRevision: entry.bookRevision, operationId: entry.operationId })} />
           </div>
           {stale && <p role="alert">{t('stale')}</p>}
           {notice && <p className="sn-notice" role="status">{t(notice)}</p>}
           {entry && (editing ? <textarea ref={editor} aria-label={t(planning ? 'materialText' : 'body')} spellCheck={false} value={entry.content} readOnly={!writable} onSelect={event => setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd })} onChange={event => storeDraft({ ...entry, content: event.target.value, operationId: crypto.randomUUID() })} /> : <pre className="sn-preview" aria-label={t(planning ? 'materialText' : 'body')}>{entry.content}</pre>)}
-          <div className="sn-row sn-recovery-actions"><button disabled={!entry || busy} onClick={readDisk}>{t('reloadDisk')}</button><button disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</button></div>
+          <div className="sn-row sn-recovery-actions"><Button size="sm" disabled={!entry || busy} onClick={readDisk}>{t('reloadDisk')}</Button><Button size="sm" disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</Button></div>
           {entry && <ChapterRecovery key={`history:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} stale={stale} t={t} onBusy={setBusy} saved={() => {
             try { localStorage.removeItem(entryKey) } catch { setError('draftFailed'); return }
             setRefresh(value => value + 1)
@@ -253,7 +259,7 @@ export function Books({ api, sessionId, t }) {
           {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Reviews key={`reviews:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} t={t} revisionHint={`${refresh}:${workTab === 'assessment'}`} revised={id => { setPreferredProposal(id); setRefresh(value => value + 1); setWorkTab('revisions') }} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
           </div>
         </>}
-      </>}
-    </>}
+      </main>
+    </div>}
   </section>
 }

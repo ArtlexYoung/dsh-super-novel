@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { Select } from './controls.js'
+import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { unwrap } from './books.js'
 
 export function Facts({ api, sessionId, book, chapterId, entry, selection, writable, dirty, t, revisionHint, adopted, locate }) {
@@ -58,19 +60,19 @@ export function Facts({ api, sessionId, book, chapterId, entry, selection, writa
     <h3>{t('facts')}</h3>
     {error && <p role="alert">{t(error)}</p>}
     <p role="status">{t(!items.some(item => item.state === 'accepted' && item.coverage === 'chapter') ? 'factsPending' : 'factsAccepted')}</p>
-    <div className="sn-row"><button disabled={!writable || dirty || busy || !entry.diskContent.trim()} onClick={generate}>{t('extractFacts')}</button>{busy && <button onClick={() => pending.current?.abort()}>{t('stop')}</button>}</div>
+    <div className="sn-row"><Button size="sm" disabled={!writable || dirty || busy || !entry.diskContent.trim()} onClick={generate}>{t('extractFacts')}</Button>{busy && <Button size="sm" onClick={() => pending.current?.abort()}>{t('stop')}</Button>}</div>
     <details><summary>{t('manualFact')}</summary>
-      <label className="sn-field">{t('subject')}<input aria-label={t('subject')} value={subject} onChange={event => setSubject(event.target.value)} /></label>
-      <label className="sn-field">{t('predicate')}<input aria-label={t('predicate')} value={predicate} onChange={event => setPredicate(event.target.value)} /></label>
-      <label className="sn-field">{t('factValue')}<input aria-label={t('factValue')} value={value} onChange={event => setValue(event.target.value)} /></label>
-      <label className="sn-field">{t('knowledgeScope')}<select aria-label={t('knowledgeScope')} value={scope} onChange={event => setScope(event.target.value)}><option value="reader">{t('reader')}</option>{characters.map(item => <option key={item.chapterId} value={item.chapterId}>{item.title}</option>)}</select></label>
+      <label className="sn-field">{t('subject')}<Input className="sn-input" aria-label={t('subject')} value={subject} onChange={event => setSubject(event.target.value)} /></label>
+      <label className="sn-field">{t('predicate')}<Input className="sn-input" aria-label={t('predicate')} value={predicate} onChange={event => setPredicate(event.target.value)} /></label>
+      <label className="sn-field">{t('factValue')}<Input className="sn-input" aria-label={t('factValue')} value={value} onChange={event => setValue(event.target.value)} /></label>
+      <label className="sn-field">{t('knowledgeScope')}<Select aria-label={t('knowledgeScope')} value={scope} onChange={event => setScope(event.target.value)}><option value="reader">{t('reader')}</option>{characters.map(item => <option key={item.chapterId} value={item.chapterId}>{item.title}</option>)}</Select></label>
       <blockquote>{entry.diskContent.slice(selection.start, selection.end)}</blockquote>
-      <button disabled={!writable || busy || dirty || selection.start === selection.end || !subject.trim() || !predicate.trim() || !value.trim()} onClick={add}>{t('saveFactCandidate')}</button>
+      <Button size="sm" disabled={!writable || busy || dirty || selection.start === selection.end || !subject.trim() || !predicate.trim() || !value.trim()} onClick={add}>{t('saveFactCandidate')}</Button>
     </details>
-    {!!items.length && <label className="sn-field">{t('factRecords')}<select aria-label={t('factRecords')} value={view?.proposalId ?? ''} onChange={event => setView(items.find(item => item.proposalId === event.target.value))}>{items.map(item => <option key={item.proposalId} value={item.proposalId}>{new Date(item.createdAt).toLocaleString()} · {t(item.state)}</option>)}</select></label>}
+    {!!items.length && <label className="sn-field">{t('factRecords')}<Select aria-label={t('factRecords')} value={view?.proposalId ?? ''} onChange={event => setView(items.find(item => item.proposalId === event.target.value))}>{items.map(item => <option key={item.proposalId} value={item.proposalId}>{new Date(item.createdAt).toLocaleString()} · {t(item.state)}</option>)}</Select></label>}
     {view && <><p role="status">{t(view.state)}</p>{view.summary && <p>{view.summary.text}</p>}
-      {view.facts.map(fact => <div className="sn-fact" key={fact.factId}><p>{fact.subject} · {fact.predicate} · {fact.value}</p><p className="sn-notice">{fact.scope.kind === 'reader' ? t('reader') : characters.find(item => item.chapterId === fact.scope.characterId)?.title ?? t('unknownCharacter')}</p><blockquote>{fact.quote}</blockquote><button disabled={view.state === 'expired'} onClick={() => locate(fact.start, fact.end)}>{t('locateEvidence')}</button></div>)}
-      <div className="sn-row"><button disabled={!writable || busy || dirty || view.state !== 'review'} onClick={() => decide(true)}>{t('acceptFacts')}</button><button disabled={!writable || busy || view.state === 'accepted' || view.state === 'rejected'} onClick={() => decide(false)}>{t('reject')}</button></div>
+      {view.facts.map(fact => <div className="sn-fact" key={fact.factId}><p>{fact.subject} · {fact.predicate} · {fact.value}</p><p className="sn-notice">{fact.scope.kind === 'reader' ? t('reader') : characters.find(item => item.chapterId === fact.scope.characterId)?.title ?? t('unknownCharacter')}</p><blockquote>{fact.quote}</blockquote><Button size="sm" disabled={view.state === 'expired'} onClick={() => locate(fact.start, fact.end)}>{t('locateEvidence')}</Button></div>)}
+      <div className="sn-row"><Button size="sm" disabled={!writable || busy || dirty || view.state !== 'review'} onClick={() => decide(true)}>{t('acceptFacts')}</Button><Button size="sm" disabled={!writable || busy || view.state === 'accepted' || view.state === 'rejected'} onClick={() => decide(false)}>{t('reject')}</Button></div>
     </>}
   </section>
 }

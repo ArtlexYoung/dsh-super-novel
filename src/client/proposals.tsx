@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { IconCheckOutline16, IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Select } from './controls.js'
+import { Button, IconCheckOutline16, IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { unwrap } from './books.js'
 import { materialInstruction, materialSources } from './materials.js'
 
@@ -103,41 +104,41 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
   return <section className="sn-proposals" aria-label={t(planning ? 'materialCandidates' : 'proposals')}>
     <h3>{t(planning ? 'materialCandidates' : 'proposals')}</h3>
     {planning && <p className="sn-notice">{t('materialCandidateHint')}</p>}
-    {view?.state === 'expired' && <button disabled={busy} onClick={() => { setMode(view.mode); setInstruction(view.instruction); setMaterials(view.materials); setMaterialIds((view.context ?? []).map(item => item.chapterId)) }}>{t('reuseRequirements')}</button>}
+    {view?.state === 'expired' && <Button size="sm" disabled={busy} onClick={() => { setMode(view.mode); setInstruction(view.instruction); setMaterials(view.materials); setMaterialIds((view.context ?? []).map(item => item.chapterId)) }}>{t('reuseRequirements')}</Button>}
     {error && <p role="alert" className="sn-alert">{t(error)}</p>}
     <div className="sn-generation">
-      <label className="sn-field">{t('generationMode')}<select aria-label={t('generationMode')} value={mode} disabled={busy} onChange={event => setMode(event.target.value)}>
+      <label className="sn-field">{t('generationMode')}<Select aria-label={t('generationMode')} value={mode} disabled={busy} onChange={event => setMode(event.target.value)}>
         {['draft', 'continue', 'rewrite', 'polish'].map(value => <option key={value} value={value}>{t(value)}</option>)}
-      </select></label>
+      </Select></label>
       {needsSelection && <p role="status">{t('selectedRange')} {selection.end - selection.start}</p>}
       <label className="sn-field">{t('instruction')}<textarea className="sn-instruction" aria-label={t('instruction')} value={instruction} maxLength={16384} disabled={busy} onChange={event => setInstruction(event.target.value)} /></label>
       <details><summary>{t('materials')}</summary><textarea className="sn-materials" aria-label={t('materials')} value={materials} maxLength={65536} disabled={busy} onChange={event => setMaterials(event.target.value)} /></details>
       <details><summary>{t('selectMaterials')}</summary><div className="sn-material-list">{materialSources(book, chapterId).map(item => <label key={item.chapterId}><input type="checkbox" checked={materialIds.includes(item.chapterId)} disabled={busy} onChange={event => setMaterialIds(previous => event.target.checked ? [...previous, item.chapterId] : previous.filter(id => id !== item.chapterId))} /><span>{item.title} · {t(item.kind)}</span></label>)}</div></details>
       {planning && <details><summary>{t('savedProseSources')}</summary><p className="sn-notice">{t('materialSourcesHint')}</p><div className="sn-material-list">{materialSources(book, chapterId, true).filter(item => !item.kind || item.kind === 'chapter').map(item => <label key={item.chapterId}><input type="checkbox" checked={materialIds.includes(item.chapterId)} disabled={busy} onChange={event => setMaterialIds(previous => event.target.checked ? [...previous, item.chapterId] : previous.filter(id => id !== item.chapterId))} /><span>{item.title} · {t('chapter')}</span></label>)}</div></details>}
       <details><summary>{t('selectVoices')}</summary><div className="sn-material-list">{voices.map(item => <label key={item.voiceId}><input type="checkbox" checked={voiceIds.includes(item.voiceId)} disabled={busy || item.state !== 'active'} onChange={event => setVoiceIds(previous => event.target.checked ? [...previous, item.voiceId] : previous.filter(id => id !== item.voiceId))} /><span>{item.sourceDescription} · {t(item.channel)} · {t(`voice-${item.state}`)}</span></label>)}</div></details>
-      {(!target?.kind || target.kind === 'chapter') && <div className="sn-fact-settings"><label><input type="checkbox" checked={useFacts} onChange={event => setUseFacts(event.target.checked)} />{t('useFacts')}</label>{useFacts && <><label className="sn-field">{t('knowledgeScope')}<select aria-label={t('contextScope')} value={knowledgeScope} onChange={event => setKnowledgeScope(event.target.value)}><option value="reader">{t('reader')}</option>{book.chapters.filter(item => item.kind === 'character').map(item => <option key={item.chapterId} value={item.chapterId}>{item.title}</option>)}</select></label><p role="status">{t(`context-${factState?.state ?? 'loading'}`)}{factState ? ` · ${factState.bytes} B` : ''}</p></>}</div>}
-      <div className="sn-row"><button disabled={!canGenerate} onClick={generate}>{t('generate')}</button>{dirty && <span className="sn-notice">{t('saveFirst')}</span>}</div>
+      {(!target?.kind || target.kind === 'chapter') && <div className="sn-fact-settings"><label><input type="checkbox" checked={useFacts} onChange={event => setUseFacts(event.target.checked)} />{t('useFacts')}</label>{useFacts && <><label className="sn-field">{t('knowledgeScope')}<Select aria-label={t('contextScope')} value={knowledgeScope} onChange={event => setKnowledgeScope(event.target.value)}><option value="reader">{t('reader')}</option>{book.chapters.filter(item => item.kind === 'character').map(item => <option key={item.chapterId} value={item.chapterId}>{item.title}</option>)}</Select></label><p role="status">{t(`context-${factState?.state ?? 'loading'}`)}{factState ? ` · ${factState.bytes} B` : ''}</p></>}</div>}
+      <div className="sn-row"><Button variant="primary" size="sm" disabled={!canGenerate} onClick={generate}>{t('generate')}</Button>{dirty && <span className="sn-notice">{t('saveFirst')}</span>}</div>
     </div>
-    {!!items.length && <label className="sn-field">{t('candidateHistory')}<select aria-label={t('candidateHistory')} value={proposalId} onChange={event => { setProposalId(event.target.value); setView(null) }}>
+    {!!items.length && <label className="sn-field">{t('candidateHistory')}<Select aria-label={t('candidateHistory')} value={proposalId} onChange={event => { setProposalId(event.target.value); setView(null) }}>
       {items.map(item => <option key={item.proposalId} value={item.proposalId}>{t(item.mode)} · {t(item.state)} · {new Date(item.createdAt).toLocaleString()}</option>)}
-    </select></label>}
+    </Select></label>}
     {view && <>
       <div className="sn-toolbar sn-candidate-status"><span role="status">{t(view.state)}{view.state === 'generating' ? ` · ${view.generatedCharacters}` : ''}</span>
-        {(view.state === 'generating' || incomplete && view.reason === 'host-restarted') && <button disabled={!writable || busy} onClick={() => action(async signal => {
+        {(view.state === 'generating' || incomplete && view.reason === 'host-restarted') && <Button size="sm" disabled={!writable || busy} onClick={() => action(async signal => {
           const value = unwrap(await api.stopProposal(sessionId, book.bookId, view.proposalId, signal))
           if (mounted.current) setView(value)
-        })}>{t('stop')}</button>}
+        })}>{t('stop')}</Button>}
       </div>
       {view.reason && <p role="status" className="sn-notice">{t(view.reason)}</p>}
       <div className="sn-modes" role="group" aria-label={t('candidateView')}>
-        <button aria-pressed={tab === 'candidate'} onClick={() => setTab('candidate')}>{t('candidate')}</button><button aria-pressed={tab === 'diff'} onClick={() => setTab('diff')}>{t('diff')}</button>
+        <Button size="sm" aria-pressed={tab === 'candidate'} onClick={() => setTab('candidate')}>{t('candidate')}</Button><Button size="sm" aria-pressed={tab === 'diff'} onClick={() => setTab('diff')}>{t('diff')}</Button>
       </div>
       {tab === 'candidate' ? <pre className="sn-candidate" aria-label={t('candidate')}>{view.candidate}</pre> : <div className="sn-diff">
         <div><h4>{t('before')}</h4><pre aria-label={t('before')}>{view.baseline.slice(view.start, view.end)}</pre></div>
         <div><h4>{t('after')}</h4><pre aria-label={t('after')}>{view.replacement}</pre></div>
       </div>}
-      <div className="sn-row"><button className="sn-decision" disabled={!writable || busy || dirty || view.state !== 'review' || view.recoveryRequired} onClick={() => decide(true)}><IconCheckOutline16 />{t('accept')}</button>
-        <button className="sn-decision" disabled={!writable || busy || !['review', 'interrupted', 'expired'].includes(view.state) || view.recoveryRequired} onClick={() => decide(false)}><IconCloseOutline16 />{t('reject')}</button>
+      <div className="sn-row"><Button variant="primary" size="sm" className="sn-decision" disabled={!writable || busy || dirty || view.state !== 'review' || view.recoveryRequired} onClick={() => decide(true)}><IconCheckOutline16 />{t('accept')}</Button>
+        <Button size="sm" className="sn-decision" disabled={!writable || busy || !['review', 'interrupted', 'expired'].includes(view.state) || view.recoveryRequired} onClick={() => decide(false)}><IconCloseOutline16 />{t('reject')}</Button>
       </div>
     </>}
   </section>

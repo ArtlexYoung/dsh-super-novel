@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { Select } from './controls.js'
+import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { unwrap } from './books.js'
 import { materialInstruction, materialKinds, materialSources, materialTemplate } from './materials.js'
 
@@ -99,9 +101,9 @@ export function MaterialCreator({ api, sessionId, book, workspaceId, writable, t
     <p className="sn-notice">{t('materialCreationHint')}</p>
     {error && <p role="alert" className="sn-alert">{t(error)}</p>}
     {retained && <p role="status" className="sn-notice">{t(transaction.current.createdBook ? 'materialCreatedRetry' : 'materialRequestRetry')}</p>}
-    <label className="sn-field">{t('materialType')}<select aria-label={t('materialType')} value={kind} disabled={busy || retained} onChange={event => { setKind(event.target.value); setLinkedChapterId('') }}>{materialKinds.map(value => <option key={value} value={value}>{t(value)}</option>)}</select></label>
-    <label className="sn-field">{t('materialName')}<input aria-label={t('materialName')} placeholder={t(kind)} maxLength={200} value={title} disabled={busy || retained} onChange={event => setTitle(event.target.value)} /></label>
-    {(kind === 'chapter-outline' || kind === 'scene') && <label className="sn-field">{t('relatedChapter')}<select aria-label={t('relatedChapter')} value={linkedChapterId} disabled={busy || retained} onChange={event => setLinkedChapterId(event.target.value)}><option value="">{t('none')}</option>{chapters.map(item => <option key={item.chapterId} value={item.chapterId}>{item.title}</option>)}</select></label>}
+    <label className="sn-field">{t('materialType')}<Select aria-label={t('materialType')} value={kind} disabled={busy || retained} onChange={event => { setKind(event.target.value); setLinkedChapterId('') }}>{materialKinds.map(value => <option key={value} value={value}>{t(value)}</option>)}</Select></label>
+    <label className="sn-field">{t('materialName')}<Input className="sn-input" aria-label={t('materialName')} placeholder={t(kind)} maxLength={200} value={title} disabled={busy || retained} onChange={event => setTitle(event.target.value)} /></label>
+    {(kind === 'chapter-outline' || kind === 'scene') && <label className="sn-field">{t('relatedChapter')}<Select aria-label={t('relatedChapter')} value={linkedChapterId} disabled={busy || retained} onChange={event => setLinkedChapterId(event.target.value)}><option value="">{t('none')}</option>{chapters.map(item => <option key={item.chapterId} value={item.chapterId}>{item.title}</option>)}</Select></label>}
     <label className="sn-field">{t('materialIdea')}<textarea className="sn-instruction" aria-label={t('materialIdea')} placeholder={t('materialIdeaHint')} maxLength={15000} value={instruction} disabled={busy || retained} onChange={event => setInstruction(event.target.value)} /></label>
     <details><summary>{t('materialSourceSelection')} ({sourceIds.length})</summary>
       {!sources.length && !chapters.length && <p className="sn-notice">{t('noMaterialSources')}</p>}
@@ -110,9 +112,9 @@ export function MaterialCreator({ api, sessionId, book, workspaceId, writable, t
       <p className="sn-notice">{t('materialSourcesHint')}</p>
     </details>
     <div className="sn-row">
-      <button disabled={!writable || busy} onClick={() => create(retained ? transaction.current.generate : true)}>{t(retained ? 'retryMaterialGeneration' : 'createAndGenerate')}</button>
-      {!retained && <button disabled={!writable || busy} onClick={() => create(false)}>{t('createTemplate')}</button>}
-      {retained && <button disabled={busy} onClick={reset}>{t('startAnotherMaterial')}</button>}
+      <Button variant="primary" size="sm" disabled={!writable || busy} onClick={() => create(retained ? transaction.current.generate : true)}>{t(retained ? 'retryMaterialGeneration' : 'createAndGenerate')}</Button>
+      {!retained && <Button variant="outline" size="sm" disabled={!writable || busy} onClick={() => create(false)}>{t('createTemplate')}</Button>}
+      {retained && <Button size="sm" disabled={busy} onClick={reset}>{t('startAnotherMaterial')}</Button>}
     </div>
   </details>
 }

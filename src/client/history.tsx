@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { Select } from './controls.js'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { unwrap } from './books.js'
 
 export function InterruptedRecovery({ api, sessionId, bookId, writable, t, saved }) {
@@ -17,11 +19,11 @@ export function InterruptedRecovery({ api, sessionId, bookId, writable, t, saved
   }
   return <details className="sn-history"><summary>{t('interruptedDrafts')}</summary>
     {error && <p role="alert">{t(error)}</p>}
-    <button disabled={busy} onClick={() => action(async signal => { const value = unwrap(await api.interruptedSave(sessionId, bookId, signal)); setView(value); setContent(value.diskContent) })}>{t('reviewRecovery')}</button>
+    <Button size="sm" disabled={busy} onClick={() => action(async signal => { const value = unwrap(await api.interruptedSave(sessionId, bookId, signal)); setView(value); setContent(value.diskContent) })}>{t('reviewRecovery')}</Button>
     {view && <><div className="sn-diff"><div><h4>{t('currentDisk')}</h4><pre>{view.diskContent}</pre></div><div><h4>{t('preparedText')}</h4><pre>{view.preparedContent}</pre></div></div>
-      <button disabled={busy || !writable} onClick={() => setContent(view.preparedContent)}>{t('usePrepared')}</button>
+      <Button size="sm" disabled={busy || !writable} onClick={() => setContent(view.preparedContent)}>{t('usePrepared')}</Button>
       <label className="sn-field">{t('mergedText')}<textarea aria-label={t('recoveryText')} value={content} readOnly={busy || !writable} onChange={event => setContent(event.target.value)} /></label>
-      <button disabled={busy || !writable} onClick={() => {
+      <Button size="sm" disabled={busy || !writable} onClick={() => {
         if (!window.confirm(t('settleConfirm'))) return
         action(async signal => {
           const request = { bookId, pendingHash: view.pendingHash, diskHash: view.diskHash, content }
@@ -29,7 +31,7 @@ export function InterruptedRecovery({ api, sessionId, bookId, writable, t, saved
           if (id.current.key !== key) id.current = { key, value: crypto.randomUUID() }
           saved(unwrap(await api.settleInterruptedSave(sessionId, { ...request, operationId: id.current.value }, signal)))
         })
-      }}>{t('settleSave')}</button>
+      }}>{t('settleSave')}</Button>
     </>}
   </details>
 }
@@ -101,24 +103,24 @@ export function ChapterRecovery({ api, sessionId, book, chapterId, entry, writab
   return <section className="sn-history" aria-label={t('history')}>
     {error && <p role="alert" className="sn-alert">{t(error)}</p>}
     <details><summary>{t('history')}</summary>
-      <label className="sn-field">{t('savedVersion')}<select aria-label={t('savedVersion')} value={version?.operationId ?? ''} disabled={busy} onChange={event => {
+      <label className="sn-field">{t('savedVersion')}<Select aria-label={t('savedVersion')} value={version?.operationId ?? ''} disabled={busy} onChange={event => {
         const id = event.target.value
         if (!id) { setVersion(null); return }
         action(async signal => { const result = unwrap(await api.chapterVersion(sessionId, book.bookId, chapterId, id, signal)); if (live.current) setVersion(result) }, false)
-      }}><option value="">{t('chooseVersion')}</option>{history.map(item => <option key={item.operationId} value={item.operationId}>{t('revision')} {item.chapterRevision} · {t(`source-${item.source}`)}</option>)}</select></label>
-      {hasOlder && <button disabled={busy} onClick={() => action(async signal => {
+      }}><option value="">{t('chooseVersion')}</option>{history.map(item => <option key={item.operationId} value={item.operationId}>{t('revision')} {item.chapterRevision} · {t(`source-${item.source}`)}</option>)}</Select></label>
+      {hasOlder && <Button size="sm" disabled={busy} onClick={() => action(async signal => {
         const older = unwrap(await api.chapterHistory(sessionId, book.bookId, chapterId, history.at(-1).bookRevision, signal))
         if (live.current) { setHistory(previous => [...previous, ...older]); setHasOlder(older.length === 100) }
-      }, false)}>{t('olderVersions')}</button>}
+      }, false)}>{t('olderVersions')}</Button>}
       {version && <><div className="sn-diff"><div><h4>{t('currentDisk')}</h4><pre>{entry.diskContent}</pre></div><div><h4>{t('savedVersion')}</h4><pre aria-label={t('historicalText')}>{version.content}</pre></div></div>
-        <button disabled={!writable || busy || dirty} onClick={restore}>{t('restoreVersion')}</button>{dirty && <p role="status">{t('saveFirst')}</p>}</>}
+        <Button size="sm" disabled={!writable || busy || dirty} onClick={restore}>{t('restoreVersion')}</Button>{dirty && <p role="status">{t('saveFirst')}</p>}</>}
     </details>
     <details open={stale || undefined}><summary>{t('conflictDrafts')}</summary>
-      <button disabled={!writable || busy} onClick={preserve}>{t('preserveBoth')}</button>
-      {!!conflicts.length && <label className="sn-field">{t('conflictRecord')}<select aria-label={t('conflictRecord')} value={conflictId} onChange={event => setConflictId(event.target.value)}>{conflicts.map(item => <option key={item.conflictId} value={item.conflictId}>{new Date(item.createdAt).toLocaleString()} · {t(item.resolved ? 'resolved' : 'unresolved')}</option>)}</select></label>}
+      <Button size="sm" disabled={!writable || busy} onClick={preserve}>{t('preserveBoth')}</Button>
+      {!!conflicts.length && <label className="sn-field">{t('conflictRecord')}<Select aria-label={t('conflictRecord')} value={conflictId} onChange={event => setConflictId(event.target.value)}>{conflicts.map(item => <option key={item.conflictId} value={item.conflictId}>{new Date(item.createdAt).toLocaleString()} · {t(item.resolved ? 'resolved' : 'unresolved')}</option>)}</Select></label>}
       {conflict && <><div className="sn-diff"><div><h4>{t('retainedLocal')}</h4><pre aria-label={t('retainedLocal')}>{conflict.localContent}</pre></div><div><h4>{t('retainedDisk')}</h4><pre aria-label={t('retainedDisk')}>{conflict.diskContent}</pre></div></div>
         {!conflict.resolved && <><label className="sn-field">{t('mergedText')}<textarea aria-label={t('mergedText')} value={merged} readOnly={!writable || busy} onChange={event => setMerged(event.target.value)} /></label>
-          <div className="sn-row sn-recovery-actions"><button disabled={!writable || busy || entry.diskHash !== conflict.diskHash} onClick={() => resolve('disk')}>{t('useDisk')}</button><button disabled={!writable || busy} onClick={() => resolve('local')}>{t('useLocal')}</button><button disabled={!writable || busy} onClick={() => resolve('merged')}>{t('saveMerge')}</button></div>
+          <div className="sn-row sn-recovery-actions"><Button size="sm" disabled={!writable || busy || entry.diskHash !== conflict.diskHash} onClick={() => resolve('disk')}>{t('useDisk')}</Button><Button size="sm" disabled={!writable || busy} onClick={() => resolve('local')}>{t('useLocal')}</Button><Button size="sm" disabled={!writable || busy} onClick={() => resolve('merged')}>{t('saveMerge')}</Button></div>
           {entry.diskHash !== conflict.diskHash && <p role="status">{t('diskChangedAgain')}</p>}
         </>}
       </>}

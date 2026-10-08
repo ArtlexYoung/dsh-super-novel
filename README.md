@@ -6,7 +6,9 @@ DeepSeek Harness 的小说写作插件，提供本地作品、章节编辑和右
 
 在聊天中规划故事、起草章节、续写或润色。预设会提醒模型关注人物动机、情节连续性、作者文风和修改范围；模型、权限和工具沿用 Harness 的配置。
 
-当前 `0.1.2` 是本地写作流程测试版，支持作品、章节、故事资料、文风授权、导入导出、起草、续写、选段改写和润色。生成结果单独保存为候选；作者查看改动并采纳后，才更新正式正文或资料。保存检查版本和正文哈希，发生外部冲突时保留原稿。
+当前 `0.1.3` 是本地写作流程测试版，支持作品、章节、故事资料、文风授权、导入导出、起草、续写、选段改写和润色。生成结果单独保存为候选；作者查看改动并采纳后，才更新正式正文或资料。保存检查版本和正文哈希，发生外部冲突时保留原稿。
+
+工作台沿用 DSH 的按钮、输入框、图标和主题样式。侧栏可折叠目录，按资料类型、关联章节和名称筛选；宽面板中目录与内容分别滚动，缩放时保留正在编辑的草稿和候选。
 
 候选可以拒绝或停止，换会话、关闭侧栏和重启后可查看记录。未完成、截断或过期的候选不能采纳。可以查看正文历史、恢复旧稿，或保留本地与磁盘两份稿后手动合并。保存正文后可提取带引用的事实和摘要候选，作者采纳后用于下一章。独立审校提供字数、段数和占位内容检查，定位问题后可生成最多两轮局部修订候选，再复核和采纳；依据不足时不会显示通过。
 
@@ -17,7 +19,7 @@ DeepSeek Harness 的小说写作插件，提供本地作品、章节编辑和右
 取得本地安装包后，在目标 profile 中安装（将路径替换为实际绝对路径）：
 
 ```sh
-dsh plugin --profile web add /absolute/path/dsh-super-novel-0.1.2.tgz
+dsh plugin --profile web add /absolute/path/dsh-super-novel-0.1.3.tgz
 ```
 
 从源码生成安装包见[开发说明](docs/development.md)。市场收录与 npm 发布是独立流程，本说明不代表当前版本已上架。
@@ -43,21 +45,17 @@ dsh plugin --profile web add /absolute/path/dsh-super-novel-0.1.2.tgz
 
 [![完整写作工作台](docs/screenshots/workflow-zh-dark.png)](docs/screenshots/workflow-zh-dark.png)
 
-截图来自 `0.1.0` 实际安装包，整链使用固定响应验证。已测试 macOS Web；真实模型质量、Desktop 和 Windows/Linux 验收尚未完成。
+截图来自 `0.1.3` 实际安装包，整链使用固定响应验证。已测试 macOS Web；真实模型质量、Desktop 和 Windows/Linux 验收尚未完成。
 
-[![小说工作台](docs/screenshots/books-zh-dark.png)](docs/screenshots/books-zh-dark.png)
+[![资料目录与编辑](docs/screenshots/sidebar-materials-zh-dark.png)](docs/screenshots/sidebar-materials-zh-dark.png)
 
-章节截图来自 `0.0.3` 安装包的真实 Harness Web 验证。界面支持中英文、明暗主题和全屏。
-
-[![生成候选](docs/screenshots/proposals-zh-dark.png)](docs/screenshots/proposals-zh-dark.png)
-
-候选截图来自 `0.0.4` 实际安装包，使用固定响应验证流程。图中截断的候选保留供查看，采纳按钮不可用。
+`0.1.3` 的资料目录支持分类、关联章节与名称筛选。截图使用合成作品和固定响应，样式随 DSH 主题切换。
 
 ## 效果
 
 [![资料生成](docs/screenshots/material-generation-zh-dark.png)](docs/screenshots/material-generation-zh-dark.png)
 
-资料入口截图来自 `0.1.2` 实际安装包；展示的是合成测试作品，界面流程使用固定响应验证。
+资料入口截图来自 `0.1.3` 实际安装包；展示的是合成测试作品，界面流程使用固定响应验证。
 
 目前完成了小规模真实模型对照、浏览器写作、`0.1.1` 真实模型技术补验和 `0.1.2` 人物资料整理补验，尚不能证明写作质量提升。资料整理通路完成，但仍需核对知情范围；首章段数约束、模型审校和修订质量有失败。详见[评测说明](docs/evaluation.md)。
 

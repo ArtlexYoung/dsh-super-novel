@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { Select } from './controls.js'
+import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { unwrap } from './books.js'
 export function Transfer({ api, sessionId, book, writable, t, imported }) {
   const [request, setRequest] = useState(null), [preview, setPreview] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [scope, setScope] = useState('chapters'), [format, setFormat] = useState('md')
@@ -22,17 +24,17 @@ export function Transfer({ api, sessionId, book, writable, t, imported }) {
         setRequest(next); setPreview(unwrap(await api.previewImport(sessionId, next, signal)))
       })
     }} /></label>
-    {request && <><label className="sn-field">{t('importTitle')}<input aria-label={t('importTitle')} maxLength={200} value={request.title} disabled={busy} onChange={event => { setRequest({ ...request, operationId: crypto.randomUUID(), title: event.target.value }); setPreview(null) }} /></label>
-      <label className="sn-field">{t('chapterBoundaries')}<select aria-label={t('chapterBoundaries')} value={request.mode} disabled={busy} onChange={event => inspect({ ...request, operationId: crypto.randomUUID(), mode: event.target.value })}>{['single', 'headings', 'archive'].map(mode => <option key={mode} value={mode}>{t(`import-${mode}`)}</option>)}</select></label>
-      {!preview && <button disabled={busy} onClick={() => inspect(request)}>{t('previewImport')}</button>}
+    {request && <><label className="sn-field">{t('importTitle')}<Input className="sn-input" aria-label={t('importTitle')} maxLength={200} value={request.title} disabled={busy} onChange={event => { setRequest({ ...request, operationId: crypto.randomUUID(), title: event.target.value }); setPreview(null) }} /></label>
+      <label className="sn-field">{t('chapterBoundaries')}<Select aria-label={t('chapterBoundaries')} value={request.mode} disabled={busy} onChange={event => inspect({ ...request, operationId: crypto.randomUUID(), mode: event.target.value })}>{['single', 'headings', 'archive'].map(mode => <option key={mode} value={mode}>{t(`import-${mode}`)}</option>)}</Select></label>
+      {!preview && <Button size="sm" disabled={busy} onClick={() => inspect(request)}>{t('previewImport')}</Button>}
     </>}
-    {preview && <><p role="status">{preview.bytes} B · {preview.chapters.length} {t('chapters')} · {t('notAnalyzed')}</p><ol className="sn-import-preview">{preview.chapters.slice(0, 100).map((item, i) => <li key={i}>{item.title} · {item.characters}</li>)}</ol><button disabled={!writable || busy} onClick={() => action(async signal => { imported(unwrap(await api.importBook(sessionId, request, signal))); setPreview(null); setRequest(null) })}>{t('confirmImport')}</button></>}
-    {busy && <button onClick={() => pending.current?.abort()}>{t('stop')}</button>}
-    {book && <><label className="sn-field">{t('exportScope')}<select aria-label={t('exportScope')} value={scope} onChange={event => setScope(event.target.value)}><option value="chapters">{t('chapters')}</option><option value="materials">{t('materialsView')}</option></select></label><label className="sn-field">{t('exportFormat')}<select aria-label={t('exportFormat')} value={format} onChange={event => setFormat(event.target.value)}><option value="md">Markdown</option><option value="txt">TXT</option></select></label>
-      <button disabled={busy || book.recoveryRequired} onClick={() => action(async signal => {
+    {preview && <><p role="status">{preview.bytes} B · {preview.chapters.length} {t('chapters')} · {t('notAnalyzed')}</p><ol className="sn-import-preview">{preview.chapters.slice(0, 100).map((item, i) => <li key={i}>{item.title} · {item.characters}</li>)}</ol><Button size="sm" disabled={!writable || busy} onClick={() => action(async signal => { imported(unwrap(await api.importBook(sessionId, request, signal))); setPreview(null); setRequest(null) })}>{t('confirmImport')}</Button></>}
+    {busy && <Button size="sm" onClick={() => pending.current?.abort()}>{t('stop')}</Button>}
+    {book && <><label className="sn-field">{t('exportScope')}<Select aria-label={t('exportScope')} value={scope} onChange={event => setScope(event.target.value)}><option value="chapters">{t('chapters')}</option><option value="materials">{t('materialsView')}</option></Select></label><label className="sn-field">{t('exportFormat')}<Select aria-label={t('exportFormat')} value={format} onChange={event => setFormat(event.target.value)}><option value="md">Markdown</option><option value="txt">TXT</option></Select></label>
+      <Button size="sm" disabled={busy || book.recoveryRequired} onClick={() => action(async signal => {
         const ids = book.chapters.filter(item => scope === 'chapters' ? !item.kind || item.kind === 'chapter' : item.kind && !['chapter', 'facts', 'voice'].includes(item.kind)).map(item => item.chapterId)
         const result = unwrap(await api.exportBook(sessionId, book.bookId, ids, signal)), url = URL.createObjectURL(new Blob([result.text], { type: 'text/plain;charset=utf-8' })), anchor = document.createElement('a')
         anchor.href = url; anchor.download = `${result.title.replace(/[\\/:*?"<>|]/g, '_')}.${format}`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
-      })}>{t('export')}</button></>}
+      })}>{t('export')}</Button></>}
   </details>
 }
