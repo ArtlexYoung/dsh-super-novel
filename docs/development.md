@@ -54,6 +54,8 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 历史与冲突界面使用新 profile，运行 `scripts/browser-history.ts`，重启后附加 `reopen` 参数。它核对历史恢复、保留两稿、手工合并和中断后第三种正文的显式恢复。阶段错误通过注入模拟，不能作为实际磁盘满或断电验收。
 
+资料与规划用 `scripts/browser-materials.ts` 检查新建场景、规划候选采纳、选择资料起草和重启。同样使用 `--generation` 的全新隔离 profile，不调用真实 provider。
+
 ## 打包与发布
 
 安装包包含编译产物、预设、bundle patch、README、文档和许可证。使用者安装 tarball 不需要生成器或相邻源码仓库。

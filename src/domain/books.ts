@@ -6,11 +6,15 @@ export const idSchema = z.uuid()
 export const titleSchema = z.string().trim().min(1).max(200).refine(value => !value.includes('\0') && Buffer.from(value, 'utf8').toString('utf8') === value)
 export const contentSchema = z.string().refine(value => !value.includes('\0') && Buffer.from(value, 'utf8').toString('utf8') === value && Buffer.byteLength(value, 'utf8') <= 4 * 1024 * 1024, 'Invalid or oversized text')
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
-export const chapterSchema = z.strictObject({ chapterId: idSchema, title: titleSchema, revision: z.int().positive(), hash: digest })
+export const documentKindSchema = z.enum(['chapter', 'seed', 'book-card', 'character', 'world', 'outline', 'chapter-outline', 'scene'])
+export const chapterSchema = z.strictObject({ chapterId: idSchema, title: titleSchema, revision: z.int().positive(), hash: digest,
+  kind: documentKindSchema.optional(), linkedChapterId: idSchema.optional() })
 export const bookSchema = z.strictObject({
   schemaVersion: z.literal(1), bookId: idSchema, title: titleSchema,
   revision: z.int().positive(), chapters: z.array(chapterSchema).max(10_000),
-}).refine(book => new Set(book.chapters.map(chapter => chapter.chapterId)).size === book.chapters.length, 'Duplicate chapter identity')
+}).refine(book => new Set(book.chapters.map(chapter => chapter.chapterId)).size === book.chapters.length &&
+  book.chapters.every(item => !item.linkedChapterId || ((item.kind === 'chapter-outline' || item.kind === 'scene') &&
+    book.chapters.some(chapter => chapter.chapterId === item.linkedChapterId && (!chapter.kind || chapter.kind === 'chapter')))), 'Invalid document identity or chapter link')
 export type Book = z.infer<typeof bookSchema>
 
 const fileStateSchema = z.strictObject({ exists: z.boolean(), text: contentSchema })

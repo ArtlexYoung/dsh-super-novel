@@ -9,7 +9,10 @@ export interface ChapterSummary {
   readonly title: string
   readonly revision: number
   readonly hash: string
+  readonly kind?: DocumentKind
+  readonly linkedChapterId?: string
 }
+export type DocumentKind = 'chapter' | 'seed' | 'book-card' | 'character' | 'world' | 'outline' | 'chapter-outline' | 'scene'
 export interface BookSnapshot {
   readonly schemaVersion: 1
   readonly bookId: string
@@ -42,6 +45,8 @@ export interface ChapterMutationRequest {
   readonly beforeChapterId: string
   readonly content: string
   readonly expectedHash: string
+  readonly kind?: DocumentKind
+  readonly linkedChapterId?: string
 }
 
 export type ProposalMode = 'draft' | 'continue' | 'rewrite' | 'polish'
@@ -57,6 +62,15 @@ export interface GenerateChapterRequest {
   readonly materials: string
   readonly start: number
   readonly end: number
+  readonly materialIds?: readonly string[]
+}
+export interface MaterialSnapshot {
+  readonly chapterId: string
+  readonly title: string
+  readonly kind: DocumentKind
+  readonly revision: number
+  readonly hash: string
+  readonly content: string
 }
 export interface ProposalSummary {
   readonly proposalId: string
@@ -92,6 +106,7 @@ export interface ProposalView extends ProposalSummary {
   readonly materials: string
   readonly elapsedMs: number
   readonly usage: GenerationUsage
+  readonly context?: readonly MaterialSnapshot[]
 }
 export interface ProposalDecisionRequest {
   readonly bookId: string

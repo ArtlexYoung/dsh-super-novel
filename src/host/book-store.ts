@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { BookError, contentSchema, hash, idSchema, json, parseBook, snapshot, titleSchema, transactionSchema, transactionSourceSchema } from '../domain/books.js'
+import { BookError, contentSchema, documentKindSchema, hash, idSchema, json, parseBook, snapshot, titleSchema, transactionSchema, transactionSourceSchema } from '../domain/books.js'
 import type { Book, Transaction } from '../domain/books.js'
 import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, InterruptedChapterSave, SettleInterruptedSaveRequest } from '../types.js'
 import { BookFiles } from './book-files.js'
@@ -12,6 +12,7 @@ const mutationSchema = z.strictObject({
   action: z.enum(['create', 'rename', 'move', 'save']), chapterId: idSchema,
   title: z.string().max(200), beforeChapterId: z.union([idSchema, z.literal('')]),
   content: contentSchema, expectedHash: z.string().max(64),
+  kind: documentKindSchema.optional(), linkedChapterId: idSchema.optional(),
 })
 export type CommitStage = 'creation' | 'prepared' | 'chapter' | 'manifest' | 'completed'
 export interface StoreHooks { afterStage?(stage: CommitStage): Promise<void> }
@@ -163,6 +164,7 @@ export class BookStore {
 
   async mutate(input: ChapterMutationRequest, signal: AbortSignal, source?: Transaction['source']): Promise<BookSnapshot> {
     const request = mutationSchema.parse(input)
+    if (request.action !== 'create' && (request.kind !== undefined || request.linkedChapterId !== undefined)) throw new BookError('invalid-request')
     const origin = source ? transactionSourceSchema.parse(source) : undefined
     return await this.files.lock(join(this.folder(request.bookId), '.write.lock'), async () => {
       signal.throwIfAborted()
@@ -183,8 +185,9 @@ export class BookStore {
         if (chapter) throw new BookError('operation-conflict')
         const before = await this.files.read(this.chapterPath(book.bookId, request.chapterId))
         if (before.exists) throw new BookError('revision-conflict')
-        next.chapters.push({ chapterId: request.chapterId, title: titleSchema.parse(request.title), revision: 1, hash: hash('') })
-        changes.push({ chapterId: request.chapterId, before, after: '' })
+        next.chapters.push({ chapterId: request.chapterId, title: titleSchema.parse(request.title), revision: 1, hash: hash(request.content),
+          ...(request.kind ? { kind: request.kind } : {}), ...(request.linkedChapterId ? { linkedChapterId: request.linkedChapterId } : {}) })
+        changes.push({ chapterId: request.chapterId, before, after: request.content })
       } else {
         if (!chapter) throw new BookError('chapter-not-found')
         if (request.action === 'rename') chapter.title = titleSchema.parse(request.title)

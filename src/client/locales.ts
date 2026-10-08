@@ -1,5 +1,8 @@
 export const zh = {
   title: '小说工作台', intro: '作品与章节',
+  chapters: '正文', materialsView: '资料与规划', documentView: '作品文档', noMaterials: '暂无资料', materialType: '资料类型', createMaterial: '新建资料', relatedChapter: '关联章节', none: '不关联', templateLanguage: 'zh',
+  seed: '故事种子', 'book-card': '书卡', character: '人物', world: '世界', outline: '总纲', 'chapter-outline': '章纲', scene: '场景', selectMaterials: '选用已保存资料',
+  'invalid-material': '资料不属于本书或类型无效。', 'material-empty': '选中的资料为空，请填写或取消选择。',
   available: '小说生成模式尚未启用', enabled: '小说生成模式已就绪',
   enable: '启用小说生成模式', resume: '继续启用', refresh: '刷新', working: '正在启用…',
   incomplete: '上次启用未完成，可以继续。', unavailable: '当前宿主无法发现小说模式。',
@@ -56,6 +59,9 @@ export const zh = {
 
 export const en = {
   title: 'Novel workspace', intro: 'Books and chapters',
+  chapters: 'Chapters', materialsView: 'Materials and plans', documentView: 'Book documents', noMaterials: 'No materials yet', materialType: 'Material type', createMaterial: 'New material', relatedChapter: 'Related chapter', none: 'None', templateLanguage: 'en',
+  seed: 'Story seed', 'book-card': 'Book card', character: 'Character', world: 'World', outline: 'Outline', 'chapter-outline': 'Chapter outline', scene: 'Scene', selectMaterials: 'Select saved materials',
+  'invalid-material': 'The material belongs to another book or has an invalid type.', 'material-empty': 'Selected material is empty. Fill it or deselect it.',
   available: 'Novel-generation mode is not enabled', enabled: 'Novel-generation mode is ready',
   enable: 'Enable novel-generation mode', resume: 'Resume setup', refresh: 'Refresh', working: 'Enabling…',
   incomplete: 'Setup was interrupted and can be resumed.', unavailable: 'The host cannot discover this mode.',

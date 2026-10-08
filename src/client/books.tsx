@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { IconPlusOutline16, IconEditOutline16, IconRefreshOutline16, IconCheckOutline16, IconChevronUpOutline14, IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Proposals } from './proposals.js'
 import { ChapterRecovery, InterruptedRecovery } from './history.js'
+import { materialKinds, materialTemplate } from './materials.js'
 
 export function unwrap(result) {
   if (!result.ok) {
@@ -40,6 +41,9 @@ export function Books({ api, sessionId, t }) {
   const [notice, setNotice] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [selection, setSelection] = useState({ start: 0, end: 0 })
+  const [documents, setDocuments] = useState('chapters')
+  const [kind, setKind] = useState('seed')
+  const [linkedChapterId, setLinkedChapterId] = useState('')
   const pending = useRef(null)
   const mounted = useRef(true)
   const requestIds = useRef(new Map())
@@ -47,6 +51,7 @@ export function Books({ api, sessionId, t }) {
   const book = library?.books.find(item => item.bookId === bookId)
   const writable = library?.writable && !busy && !book?.recoveryRequired
   const currentChapter = book?.chapters.find(item => item.chapterId === chapterId)
+  const visible = book?.chapters.filter(item => documents === 'chapters' ? !item.kind || item.kind === 'chapter' : item.kind && item.kind !== 'chapter') ?? []
   const dirty = entry && (entry.content !== entry.diskContent || entry.externallyModified)
   const stale = entry && (entry.bookRevision !== book?.revision || entry.baseHash !== entry.diskHash)
   const entryKey = entry && draftKey(library.workspaceId, bookId, chapterId)
@@ -63,6 +68,7 @@ export function Books({ api, sessionId, t }) {
       setLibrary(value)
       let saved = {}
       try { saved = JSON.parse(localStorage.getItem(`super-novel.selection:${value.workspaceId}`) || '{}') } catch {}
+      if (!library && saved.documents === 'materials') setDocuments('materials')
       setBookId(previous => value.books.some(item => item.bookId === previous) ? previous : value.books.some(item => item.bookId === saved.bookId) ? saved.bookId : value.books[0]?.bookId ?? '')
       setChapterId(previous => previous || saved.chapterId || '')
       setError('')
@@ -76,10 +82,10 @@ export function Books({ api, sessionId, t }) {
     setEntry(null)
     setSelection({ start: 0, end: 0 })
     if (!book) return () => controller.abort()
-    try { localStorage.setItem(`super-novel.selection:${library.workspaceId}`, JSON.stringify({ bookId, chapterId })) } catch {}
+    try { localStorage.setItem(`super-novel.selection:${library.workspaceId}`, JSON.stringify({ bookId, chapterId, documents })) } catch {}
     if (book.recoveryRequired) return () => controller.abort()
     if (!book.chapters.some(item => item.chapterId === chapterId)) {
-      setChapterId(book.chapters[0]?.chapterId ?? '')
+      setChapterId(visible[0]?.chapterId ?? '')
       return () => controller.abort()
     }
     setRenameTitle(book.chapters.find(item => item.chapterId === chapterId).title)
@@ -94,7 +100,7 @@ export function Books({ api, sessionId, t }) {
       setNotice(validDraft ? 'localDraft' : value.externallyModified ? 'external' : '')
     }).catch(error => { if (!controller.signal.aborted) setError(error.reason ?? 'storage-failed') })
     return () => controller.abort()
-  }, [api, sessionId, bookId, chapterId, book?.revision, book?.recoveryRequired, refresh])
+  }, [api, sessionId, bookId, chapterId, book?.revision, book?.recoveryRequired, refresh, documents])
 
   useEffect(() => {
     const handle = event => { if (dirty) { event.preventDefault(); event.returnValue = '' } }
@@ -181,13 +187,18 @@ export function Books({ api, sessionId, t }) {
       {book?.recoveryRequired && <button disabled={busy || !library.writable} onClick={() => action(async signal => applyBook(unwrap(await api.recoverBook(sessionId, bookId, signal))))}>{t('recover')}</button>}
       {book?.recoveryRequired && <InterruptedRecovery key={bookId} api={api} sessionId={sessionId} bookId={bookId} writable={library.writable && !busy} t={t} saved={applyBook} />}
       {book && !book.recoveryRequired && <>
+        <div className="sn-modes" role="tablist" aria-label={t('documentView')}>{['chapters', 'materialsView'].map((value, index) => <button role="tab" key={value} aria-selected={documents === (index ? 'materials' : 'chapters')} onClick={() => { setDocuments(index ? 'materials' : 'chapters'); setChapterId('') }}>{t(value)}</button>)}</div>
         <nav className="sn-chapters" aria-label={t('chapter')}>
-          {!book.chapters.length && <p>{t('noChapters')}</p>}
-          {book.chapters.map((item, index) => <button key={item.chapterId} disabled={busy} aria-current={chapterId === item.chapterId ? 'true' : undefined} onClick={() => { setChapterId(item.chapterId); setError('') }}><span className="sn-number">{index + 1}</span><span>{item.title}</span></button>)}
+          {!visible.length && <p>{t(documents === 'chapters' ? 'noChapters' : 'noMaterials')}</p>}
+          {visible.map((item, index) => <button key={item.chapterId} disabled={busy} aria-current={chapterId === item.chapterId ? 'true' : undefined} onClick={() => { setChapterId(item.chapterId); setError('') }}><span className="sn-number">{index + 1}</span><span>{item.title}{item.kind && item.kind !== 'chapter' ? ` · ${t(item.kind)}` : ''}</span></button>)}
         </nav>
-        <form className="sn-row" onSubmit={event => { event.preventDefault(); const key = `chapter:${bookId}:${book.revision}:${chapterTitle.trim()}`; if (!requestIds.current.has(key)) requestIds.current.set(key, crypto.randomUUID()); change('create', { chapterId: requestIds.current.get(key), title: chapterTitle }) }}>
+        {documents === 'materials' && <><label className="sn-field">{t('materialType')}<select aria-label={t('materialType')} value={kind} onChange={event => { setKind(event.target.value); setLinkedChapterId('') }}>{materialKinds.map(value => <option key={value} value={value}>{t(value)}</option>)}</select></label>
+          {(kind === 'chapter-outline' || kind === 'scene') && <label className="sn-field">{t('relatedChapter')}<select aria-label={t('relatedChapter')} value={linkedChapterId} onChange={event => setLinkedChapterId(event.target.value)}><option value="">{t('none')}</option>{book.chapters.filter(item => !item.kind || item.kind === 'chapter').map(item => <option key={item.chapterId} value={item.chapterId}>{item.title}</option>)}</select></label>}
+        </>}
+        <form className="sn-row" onSubmit={event => { event.preventDefault(); const key = `chapter:${bookId}:${book.revision}:${chapterTitle.trim()}:${documents}:${kind}:${linkedChapterId}`; if (!requestIds.current.has(key)) requestIds.current.set(key, crypto.randomUUID()); change('create', { chapterId: requestIds.current.get(key), title: chapterTitle,
+          ...(documents === 'materials' ? { kind, content: materialTemplate(kind, t('templateLanguage')), ...(linkedChapterId ? { linkedChapterId } : {}) } : {}) }) }}>
           <input aria-label={t('chapterTitle')} placeholder={t('chapterTitle')} value={chapterTitle} maxLength={200} disabled={!writable} onChange={event => setChapterTitle(event.target.value)} />
-          <IconButton label={t('createChapter')} icon={IconPlusOutline16} type="submit" disabled={!writable || !chapterTitle.trim()} />
+          <IconButton label={t(documents === 'chapters' ? 'createChapter' : 'createMaterial')} icon={IconPlusOutline16} type="submit" disabled={!writable || !chapterTitle.trim()} />
         </form>
         {currentChapter && <>
           <div className="sn-row">

@@ -55,12 +55,23 @@ export class ProposalStore {
       const chapter = await this.books.readChapter(request.bookId, request.chapterId)
       if (chapter.book.revision !== request.expectedRevision || chapter.hash !== request.expectedHash || chapter.externallyModified) throw new BookError('revision-conflict')
       validateRange(request, chapter.content)
+      const context = []
+      for (const id of request.materialIds ?? []) {
+        const selected = await this.books.readChapter(request.bookId, id)
+        const document = selected.book.chapters.find(item => item.chapterId === id)!
+        if (!document.kind || document.kind === 'chapter' || id === request.chapterId) throw new BookError('invalid-material')
+        if (selected.externallyModified || selected.book.revision !== request.expectedRevision) throw new BookError('revision-conflict')
+        if (!selected.content.trim()) throw new BookError('material-empty')
+        context.push({ chapterId: id, title: document.title, kind: document.kind, revision: document.revision, hash: selected.hash, content: selected.content })
+      }
       const now = Date.now()
       const proposal: Proposal = { schemaVersion: 1, workspaceId: this.workspaceId, sessionId, owner, request,
         requestHash: hash(json(request)), acceptanceId: randomUUID(), baseline: chapter.content,
         baselineChapterRevision: chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.revision,
         createdAt: now, updatedAt: now, state: 'generating', reason: '', replacement: '',
-        candidateHash: '', elapsedMs: 0, usage: { state: 'unknown' } }
+        candidateHash: '', elapsedMs: 0, usage: { state: 'unknown' },
+        ...(chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind ? { documentKind: chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind } : {}),
+        ...(request.materialIds ? { context } : {}) }
       proposal.candidateHash = hash(candidate(proposal))
       if (Buffer.byteLength(generationPrompt(proposal), 'utf8') > 256 * 1024) throw new BookError('context-too-large')
       await this.files.directory(join(this.folder(request.bookId), 'proposals'))
@@ -100,6 +111,10 @@ export class ProposalStore {
     if (book.recoveryRequired) return proposalView(proposal, proposal.state === 'generating' && !active ? 'interrupted' : proposal.state, 'recovery-required', true)
     const chapter = await this.books.readChapter(bookId, proposal.request.chapterId)
     if (chapter.book.revision !== proposal.request.expectedRevision || chapter.hash !== proposal.request.expectedHash) return proposalView(proposal, active && proposal.state === 'generating' ? 'generating' : 'expired', 'revision-conflict', false)
+    for (const item of proposal.context ?? []) {
+      const current = await this.books.readChapter(bookId, item.chapterId)
+      if (current.hash !== item.hash || current.externallyModified) return proposalView(proposal, 'expired', 'revision-conflict', false)
+    }
     return proposalView(proposal, proposal.state === 'generating' && !active ? 'interrupted' : proposal.state,
       proposal.state === 'generating' && !active ? 'host-restarted' : proposal.reason, false)
   }

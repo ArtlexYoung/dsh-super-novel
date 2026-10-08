@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { BookError, contentSchema, hash, idSchema, json } from './books.js'
+import { BookError, contentSchema, documentKindSchema, hash, idSchema, json, titleSchema } from './books.js'
 import type { ChapterMutationRequest, GenerationUsage, GenerateChapterRequest, ProposalView } from '../types.js'
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
@@ -10,7 +10,10 @@ export const generationRequestSchema = z.strictObject({
   instruction: contentSchema.pipe(z.string().trim().min(1).max(16_384)),
   materials: contentSchema.pipe(z.string().max(65_536)),
   start: z.int().nonnegative(), end: z.int().nonnegative(),
+  materialIds: z.array(idSchema).max(100).refine(ids => new Set(ids).size === ids.length).optional(),
 })
+const materialSchema = z.strictObject({ chapterId: idSchema, title: titleSchema, kind: documentKindSchema,
+  revision: z.int().positive(), hash: digest, content: contentSchema })
 export const decisionSchema = z.strictObject({ bookId: idSchema, proposalId: idSchema, expectedCandidateHash: digest })
 const usageSchema = z.discriminatedUnion('state', [
   z.strictObject({ state: z.literal('unknown') }),
@@ -24,6 +27,7 @@ export const proposalSchema = z.strictObject({
   state: z.enum(['generating', 'review', 'accepted', 'rejected', 'interrupted']), reason: z.string().max(100),
   baseline: contentSchema, baselineChapterRevision: z.int().positive(),
   replacement: contentSchema, candidateHash: digest, elapsedMs: z.int().nonnegative(), usage: usageSchema,
+  documentKind: documentKindSchema.optional(), context: z.array(materialSchema).max(100).optional(),
 })
 export type Proposal = z.infer<typeof proposalSchema>
 
@@ -49,6 +53,9 @@ export function parseProposal(text: string, workspaceId: string, bookId: string,
   if (proposal.workspaceId !== workspaceId || proposal.request.bookId !== bookId || proposal.request.proposalId !== proposalId ||
     proposal.requestHash !== hash(json(proposal.request)) || proposal.request.expectedHash !== hash(proposal.baseline) ||
     proposal.candidateHash !== hash(candidate(proposal)) || !contentSchema.safeParse(candidate(proposal)).success) throw new BookError('invalid-format')
+  const selected = proposal.request.materialIds ?? []
+  const context = proposal.context ?? []
+  if (context.length !== selected.length || context.some((item, index) => item.chapterId !== selected[index] || item.hash !== hash(item.content))) throw new BookError('invalid-format')
   validateRange(proposal.request, proposal.baseline)
   return proposal
 }
@@ -65,12 +72,15 @@ export function proposalView(proposal: Proposal, state: ProposalView['state'], r
     generatedCharacters: proposal.replacement.length, recoveryRequired, baselineRevision: proposal.request.expectedRevision,
     baselineHash: proposal.request.expectedHash, baseline: proposal.baseline, start: proposal.request.start, end: proposal.request.end,
     replacement: proposal.replacement, candidate: candidate(proposal), candidateHash: proposal.candidateHash,
-    instruction: proposal.request.instruction, materials: proposal.request.materials, elapsedMs: proposal.elapsedMs, usage: proposal.usage as GenerationUsage }
+    instruction: proposal.request.instruction, materials: proposal.request.materials, elapsedMs: proposal.elapsedMs, usage: proposal.usage as GenerationUsage,
+    ...(proposal.context ? { context: proposal.context } : {}) }
 }
 
 export function generationPrompt(proposal: Proposal): string {
   const modes = { draft: 'Write a complete chapter replacing the authorized text.', continue: 'Write only the continuation to append. Do not repeat the existing chapter.', rewrite: 'Rewrite only the authorized selection.', polish: 'Polish only the authorized selection, preserving its meaning and voice.' }
   return JSON.stringify({ task: modes[proposal.request.mode], instruction: proposal.request.instruction,
     authorMaterials: proposal.request.materials, chapter: proposal.baseline,
+    ...(proposal.documentKind && proposal.documentKind !== 'chapter' ? { documentKind: proposal.documentKind, planningTask: 'Write only the requested planning document. Planned events are not established story facts.' } : {}),
+    ...(proposal.context?.length ? { selectedMaterials: proposal.context, planningBoundary: 'Plans describe possible future events, not events that have already happened.' } : {}),
     selection: { start: proposal.request.start, end: proposal.request.end, text: proposal.baseline.slice(proposal.request.start, proposal.request.end) } })
 }
