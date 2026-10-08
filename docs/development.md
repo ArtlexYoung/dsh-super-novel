@@ -59,7 +59,7 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 资料页直接生成用 `scripts/browser-material-generation.ts`，覆盖七类资料、默认名称与要求、资料和正文来源、采纳/拒绝、创建后失败重试、停止、切书隔离。停服重开后附加 `reopen`，确认资料和未完成候选保留，查询不调用模型。
 
-侧栏适配用 `scripts/browser-sidebar.ts`，覆盖七类混合资料、类型/关联章节/名称筛选、100 项分页、目录折叠、300/420px 拖动侧栏和 900px 全屏。它同时检查草稿、候选和采纳结果在缩放时保留；停服重启后附加 `reopen`，确认查询不会重新生成。浏览器自动回归使用 Chromium，不代表 Safari 或 Desktop 已通过。
+侧栏适配用 `scripts/browser-sidebar.ts`，覆盖七类混合资料、类型/关联章节/名称筛选、100 项分页、目录折叠、300/420px 拖动侧栏和 900px 全屏。它同时检查草稿、候选和采纳结果在缩放时保留；停服重启后附加 `reopen`，确认查询不会重新生成。该浏览器命令使用 Chromium，只验证 Web；桌面原生协议的补验范围见[评测说明](evaluation.md)。
 
 事实工作流用 `scripts/browser-facts.ts` 验证提取、采纳、引用定位、下一章上下文及旧章变化后过期。固定响应只能证明流程，事实含义与连续写作质量仍需真实模型和人工评阅。
 
@@ -81,4 +81,4 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 `screenshots.json` 声明本仓库的真实安装包截图，图中版本和固定响应限制见 README。源码不包含编译产物，市场安装需已构建 tarball；取得 GitHub Release 下载地址后再投稿，不把源码地址当成可直接安装的发布包。
 
-平台补验可在对应机器执行上面的类型、构建、测试和包检查，再运行实际包 workflow/reopen。Windows 的目录 fsync 限制及文件占用重试已有模拟回归，不能替代 Windows/Linux、Desktop 实机验收。POSIX 权限测试在 Windows 跳过，跳过项必须记录。
+平台补验可在对应机器执行上面的类型、构建、测试和包检查，再运行实际包 workflow/reopen。Windows 的目录 fsync 限制及文件占用重试已有模拟回归，不能替代 Windows/Linux 和签名桌面发行版验收。POSIX 权限测试在 Windows 跳过，跳过项必须记录。

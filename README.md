@@ -14,7 +14,7 @@ DeepSeek Harness 的小说写作插件，提供本地作品、章节编辑和右
 
 ## 安装
 
-需要 DeepSeek Harness `0.1.5-rc.2`，Node.js `^22.19.0 || >=24.0.0`。其他宿主版本尚未验证。
+需要 DeepSeek Harness `0.1.5-rc.2`，Node.js `^22.19.0 || >=24.0.0`。DSH NEXT `2.0.17-next` 使用宿主 `0.2.0-rc.2`，会跳过本版插件。
 
 取得本地安装包后，在目标 profile 中安装（将路径替换为实际绝对路径）：
 
@@ -24,7 +24,7 @@ dsh plugin --profile web add /absolute/path/dsh-super-novel-0.1.3.tgz
 
 从源码生成安装包见[开发说明](docs/development.md)。市场收录与 npm 发布是独立流程，本说明不代表当前版本已上架。
 
-安装异常时，在实际 profile 目录运行 `node node_modules/dsh-super-novel/scripts/doctor.mjs`，检查 Node、构建文件和依赖版本；该命令只读，不调用模型。已测试 macOS Web，Desktop 和 Windows/Linux 仍待实机验收。
+安装异常时，在实际 profile 目录运行 `node node_modules/dsh-super-novel/scripts/doctor.mjs`，检查 Node、构建文件和依赖版本；该命令只读，不调用模型。已测试 macOS Web 与 `0.1.5-rc.2` 桌面开发壳的侧栏；签名桌面发行版和 Windows/Linux 仍待验收。
 
 ## 使用
 
@@ -45,7 +45,7 @@ dsh plugin --profile web add /absolute/path/dsh-super-novel-0.1.3.tgz
 
 [![完整写作工作台](docs/screenshots/workflow-zh-dark.png)](docs/screenshots/workflow-zh-dark.png)
 
-截图来自 `0.1.3` 实际安装包，整链使用固定响应验证。已测试 macOS Web；真实模型质量、Desktop 和 Windows/Linux 验收尚未完成。
+截图来自 `0.1.3` 实际安装包，整链使用固定响应验证。macOS Web 与桌面开发壳侧栏通过；真实模型质量、签名桌面发行版和 Windows/Linux 验收尚未完成。
 
 [![资料目录与编辑](docs/screenshots/sidebar-materials-zh-dark.png)](docs/screenshots/sidebar-materials-zh-dark.png)
 

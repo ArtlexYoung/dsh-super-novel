@@ -72,4 +72,4 @@ Windows 跳过 Node 不支持的目录 fsync，文件写入仍执行 fsync；不
 
 schemaVersion 1 的旧作品无需迁移，缺少 kind 的旧章节仍是正文。无新字段的旧候选和审校保持原格式与快照；未知高版本拒绝写入。卸载取消宿主任务并等待候选、事实提取和审校结束，保留候选前缀和 workspace 数据；热卸载、锁释放和重装读回已有 Host 回归，实际 Desktop 热卸载仍需验收。
 
-实际验证覆盖 macOS Web 固定响应整链与重启；Desktop、Windows/Linux、真实质量和完整磁盘故障矩阵未完成。恢复限制见[使用说明](usage.md)。
+实际验证覆盖 macOS Web 固定响应整链与重启，以及 `0.1.5-rc.2` 桌面开发壳的侧栏与重启；签名桌面发行版、Windows/Linux、真实质量和完整磁盘故障矩阵未完成。当前 DSH NEXT 的 `0.2.0-rc.2` 宿主会跳过本版插件，补验范围见[评测说明](evaluation.md)。恢复限制见[使用说明](usage.md)。
