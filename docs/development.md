@@ -57,6 +57,8 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 资料与规划用 `scripts/browser-materials.ts` 检查新建场景、规划候选采纳、选择资料起草和重启。同样使用 `--generation` 的全新隔离 profile，不调用真实 provider。
 
+资料页直接生成用 `scripts/browser-material-generation.ts`，覆盖七类资料、默认名称与要求、资料和正文来源、采纳/拒绝、创建后失败重试、停止、切书隔离。停服重开后附加 `reopen`，确认资料和未完成候选保留，查询不调用模型。
+
 事实工作流用 `scripts/browser-facts.ts` 验证提取、采纳、引用定位、下一章上下文及旧章变化后过期。固定响应只能证明流程，事实含义与连续写作质量仍需真实模型和人工评阅。
 
 审校工作流用 `scripts/browser-reviews.ts` 验证占位检查、定位、局部修订、复核、采纳和重启。单测覆盖无效引用、损坏记录、输入预算和两轮上限；固定响应不能证明审校准确率或修订质量。
@@ -75,6 +77,6 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 发布前核对版本、文件清单，并在独立 profile 安装实际 tarball。npm 发布与市场收录分别执行；`npm pack` 不会发布。旧版本准备记录见 [0.0.1 发布说明](RELEASE-0.0.1.md)。
 
-`screenshots.json` 声明三张本仓库的真实安装包截图，图中版本和固定响应限制见 README。源码不包含编译产物，市场安装需已构建 tarball；取得 GitHub Release 下载地址后再投稿，不把源码地址当成可直接安装的发布包。
+`screenshots.json` 声明本仓库的真实安装包截图，图中版本和固定响应限制见 README。源码不包含编译产物，市场安装需已构建 tarball；取得 GitHub Release 下载地址后再投稿，不把源码地址当成可直接安装的发布包。
 
 平台补验可在对应机器执行上面的类型、构建、测试和包检查，再运行实际包 workflow/reopen。Windows 的目录 fsync 限制及文件占用重试已有模拟回归，不能替代 Windows/Linux、Desktop 实机验收。POSIX 权限测试在 Windows 跳过，跳过项必须记录。

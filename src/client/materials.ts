@@ -12,3 +12,15 @@ const fields = {
   },
 }
 export function materialTemplate(kind, language) { return (fields[language]?.[kind] ?? []).map(field => `## ${field}\n\n`).join('') }
+
+export function materialInstruction(kind, language) {
+  const headings = (fields[language]?.[kind] ?? fields.en[kind] ?? []).join(language === 'zh' ? '、' : ', ')
+  return language === 'zh'
+    ? `生成或完善一份可供写作引用的资料，用 Markdown 小标题组织，包含：${headings}。保留已有明确设定，写出具体、可修改的内容。引用正文时区分原文已有信息、未知项和建议新增设定；规划中的未来事件不能写成已发生事实。只返回资料内容。`
+    : `Create or improve a usable writing reference in Markdown, with sections for: ${headings}. Keep explicit existing settings and provide concrete, editable details. When using saved prose, separate information in the text, unknowns, and suggested additions. Planned events are not established facts. Return only the material.`
+}
+
+export function materialSources(book, targetId = '', includeChapters = false) {
+  return book.chapters.filter(item => item.chapterId !== targetId && item.kind !== 'facts' && item.kind !== 'voice' &&
+    (includeChapters || item.kind && item.kind !== 'chapter'))
+}

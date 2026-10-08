@@ -19,7 +19,8 @@ export async function apply(ctx) {
       assert.equal(options.tools.length, 0)
       assert.equal(options.messages.length, 1)
       const input = JSON.parse(options.messages[0].content[0].text)
-      calls.push({ sessionId: options.sessionId, instruction: input.instruction, chapter: input.chapter, selection: input.selection })
+      calls.push({ sessionId: options.sessionId, instruction: input.instruction, chapter: input.chapter, selection: input.selection,
+        ...(input.documentKind ? { documentKind: input.documentKind } : {}), ...(input.selectedMaterials ? { selectedMaterials: input.selectedMaterials } : {}) })
       await writeFile(callFile, JSON.stringify(calls))
       if (input.task === 'extract-facts') {
         const quote = input.chapter.slice(0, Math.min(40, input.chapter.length))

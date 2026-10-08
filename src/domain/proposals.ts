@@ -90,10 +90,12 @@ export function proposalView(proposal: Proposal, state: ProposalView['state'], r
 
 export function generationPrompt(proposal: Proposal): string {
   const modes = { draft: 'Write a complete chapter replacing the authorized text.', continue: 'Write only the continuation to append. Do not repeat the existing chapter.', rewrite: 'Rewrite only the authorized selection.', polish: 'Polish only the authorized selection, preserving its meaning and voice.' }
-  return JSON.stringify({ task: modes[proposal.request.mode], instruction: proposal.request.instruction,
+  const planning = proposal.documentKind && proposal.documentKind !== 'chapter'
+  return JSON.stringify({ task: planning && proposal.request.mode === 'draft' ? 'Create or improve the requested material, replacing the authorized text.' : modes[proposal.request.mode], instruction: proposal.request.instruction,
     authorMaterials: proposal.request.materials, chapter: proposal.baseline,
     ...(proposal.documentKind && proposal.documentKind !== 'chapter' ? { documentKind: proposal.documentKind, planningTask: 'Write only the requested planning document. Planned events are not established story facts.' } : {}),
-    ...(proposal.context?.length ? { selectedMaterials: proposal.context, planningBoundary: 'Plans describe possible future events, not events that have already happened.' } : {}),
+    ...(proposal.context?.length ? { selectedMaterials: proposal.context, planningBoundary: 'Plans describe possible future events, not events that have already happened.',
+      ...(proposal.context.some(item => item.kind === 'chapter') ? { sourceBoundary: 'Sources with kind=chapter are saved prose. When organizing materials from prose, distinguish what the text says from proposed additions and unknowns. Do not invent evidence, assume off-page events, or convert plans into established facts. This material does not update the evidence-backed fact records.' } : {}) } : {}),
     ...(proposal.factContext ? { establishedFacts: proposal.factContext.content, knowledgeScope: proposal.factContext.scope } : {}),
     ...(proposal.voiceContext?.length ? { authorVoices: proposal.voiceContext, voiceBoundary: 'Authorized samples are stylistic references, not story facts. Preserve deliberate repetition, colloquial dialogue and rough expression when appropriate. Keep narration and named-character dialogue separate.' } : {}),
     selection: { start: proposal.request.start, end: proposal.request.end, text: proposal.baseline.slice(proposal.request.start, proposal.request.end) } })

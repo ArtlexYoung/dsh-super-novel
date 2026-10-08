@@ -70,13 +70,15 @@ export class ProposalStore {
       }
       validateRange(request, baseline)
       const context = []
+      const targetKind = chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind ?? 'chapter'
       for (const id of request.materialIds ?? []) {
         const selected = await this.books.readChapter(request.bookId, id)
         const document = selected.book.chapters.find(item => item.chapterId === id)!
-        if (!document.kind || document.kind === 'chapter' || document.kind === 'facts' || document.kind === 'voice' || id === request.chapterId) throw new BookError('invalid-material')
+        const kind = document.kind ?? 'chapter'
+        if (kind === 'facts' || kind === 'voice' || id === request.chapterId || kind === 'chapter' && targetKind === 'chapter') throw new BookError('invalid-material')
         if (selected.externallyModified || selected.book.revision !== request.expectedRevision) throw new BookError('revision-conflict')
         if (!selected.content.trim()) throw new BookError('material-empty')
-        context.push({ chapterId: id, title: document.title, kind: document.kind, revision: document.revision, hash: selected.hash, content: selected.content })
+        context.push({ chapterId: id, title: document.title, kind, revision: document.revision, hash: selected.hash, content: selected.content })
       }
       const now = Date.now()
       const voices = request.voiceIds ? await new VoiceStore(this.books).selected(request.bookId, request.voiceIds) : undefined
