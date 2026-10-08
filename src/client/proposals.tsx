@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { IconCheckOutline16, IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { unwrap } from './books.js'
 
-export function Proposals({ api, sessionId, book, chapterId, entry, writable, dirty, selection, t, revisionHint, adopted }) {
+export function Proposals({ api, sessionId, book, chapterId, entry, writable, dirty, selection, t, revisionHint, preferredProposal, adopted }) {
   const [items, setItems] = useState([])
   const [proposalId, setProposalId] = useState('')
   const [view, setView] = useState(null)
@@ -23,6 +23,7 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
   const mounted = useRef(true)
   const running = view?.state === 'generating' || items.some(item => item.state === 'generating')
   const target = book.chapters.find(item => item.chapterId === chapterId)
+  useEffect(() => { if (preferredProposal) { setProposalId(preferredProposal); setView(null) } }, [preferredProposal])
   useEffect(() => {
     const controller = new AbortController()
     api.voiceSamples(sessionId, book.bookId, controller.signal).then(unwrap).then(value => { if (!controller.signal.aborted) setVoices(value) }).catch(error => { if (!controller.signal.aborted) setError(error.reason ?? 'storage-failed') })

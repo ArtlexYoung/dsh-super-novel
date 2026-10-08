@@ -26,7 +26,8 @@ export class BookFiles {
       current = join(current, pieces[i]!)
       try {
         const stat = await lstat(current)
-        if (stat.isSymbolicLink() || (i < pieces.length - 1 && !stat.isDirectory()) || (!stat.isDirectory() && !stat.isFile()) || (stat.isFile() && stat.nlink !== 1)) throw new BookError('unsafe-path')
+        // lstat can also observe the old inode as atomic replacement unlinks it.
+        if (stat.isSymbolicLink() || (i < pieces.length - 1 && !stat.isDirectory()) || (!stat.isDirectory() && !stat.isFile()) || (stat.isFile() && stat.nlink > 1)) throw new BookError('unsafe-path')
       } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; break }
     }
     return target

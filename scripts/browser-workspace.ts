@@ -34,7 +34,7 @@ export async function withWorkspace(output, run) {
     if (!await books.isVisible()) await guide.click()
     await books.waitFor()
     try { await run(page) }
-    catch (error) { await page.screenshot({ path: join(output, 'browser-failure.png') }); console.error(await page.locator('.sn-books').innerText()); throw error }
+    catch (error) { await page.screenshot({ path: join(output, 'browser-failure.png') }).catch(() => {}); console.error(await page.locator('.sn-books').innerText({ timeout: 1000 }).catch(() => 'Novel panel unavailable')); throw error }
     assert.deepEqual(errors, [])
   } finally { await browser.close() }
 }

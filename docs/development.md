@@ -62,7 +62,11 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 ## 打包与发布
 
-0.0.9 工作台用 `scripts/browser-voices.ts` 验证导入预览、授权样本、撤销后候选过期和导出边界。真实作者声音质量、跨平台文件选择器和大规模目录性能仍未验证。
+工作台用 `scripts/browser-voices.ts` 验证导入预览、授权样本、撤销后候选过期和导出回读。`scripts/browser-directory.ts` 验证 1000 章分页、搜索和长正文；本机结果不代表其他平台性能。
+
+完整链路用 `scripts/browser-workflow.ts`，先运行默认 workflow，停服重开后附加 `reopen`。它检查规划采纳、章纲起草、候选审校、局部修订、复核采纳、事实回填、下一章、停止和纯查询。所有模型响应固定，真实作者声音与质量仍未验证。
+
+共存检查使用 `scripts/prepare-coexist.ts`，需要本地已有 super-code 安装包，分别测试 first/last 两种顺序；浏览器工作流附加 `--coexist`。隔离 profile 固定英文，与浏览器初始语言一致。super-code 当前语言同步会触发整页重载，语言不一致时可能循环重载；两插件共存时的语言切换仍有此限制。
 
 安装包包含编译产物、预设、bundle patch、README、文档和许可证。使用者安装 tarball 不需要生成器或相邻源码仓库。
 

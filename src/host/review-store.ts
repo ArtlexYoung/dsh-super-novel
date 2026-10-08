@@ -56,6 +56,13 @@ export class ReviewStore {
   }
   async run(input: ReviewRequest, generate: TextGenerator | false, signal: AbortSignal): Promise<ReviewView> {
     const request = reviewRequestSchema.parse(input)
+    signal.throwIfAborted()
+    await this.books.readBook(request.bookId)
+    await this.files.directory(this.folder(request.bookId))
+    return await this.files.lock(join(this.folder(request.bookId), `.${request.reviewId}.lock`), async () => await this.assess(request, generate, signal))
+  }
+  private async assess(request: ReviewRequest, generate: TextGenerator | false, signal: AbortSignal): Promise<ReviewView> {
+    signal.throwIfAborted()
     const existing = await this.files.read(this.path(request.bookId, request.reviewId), 32 * 1024 * 1024)
     if (existing.exists) {
       const record = this.parse(existing.text, request.bookId, request.reviewId)

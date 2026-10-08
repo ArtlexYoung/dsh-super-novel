@@ -47,6 +47,7 @@ export function Books({ api, sessionId, t }) {
   const [selection, setSelection] = useState({ start: 0, end: 0 })
   const [documents, setDocuments] = useState('chapters')
   const [kind, setKind] = useState('seed')
+  const [preferredProposal, setPreferredProposal] = useState('')
   const [linkedChapterId, setLinkedChapterId] = useState('')
   const [workTab, setWorkTab] = useState(() => { try { const tab = localStorage.getItem('super-novel.workTab'); return ['writing', 'references', 'assessment', 'revisions'].includes(tab) ? tab : 'writing' } catch { return 'writing' } }), [search, setSearch] = useState(''), [directoryPage, setDirectoryPage] = useState(0)
   useEffect(() => { try { localStorage.setItem('super-novel.workTab', workTab) } catch {} }, [workTab])
@@ -244,13 +245,13 @@ export function Books({ api, sessionId, t }) {
           }} />}
           </div>
           <div id="sn-panel-revisions" aria-labelledby="sn-tab-revisions" hidden={workTab !== 'revisions'} role="tabpanel">
-          {entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} />}
+          {entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} preferredProposal={preferredProposal} adopted={() => setRefresh(value => value + 1)} />}
           </div>
           <div id="sn-panel-references" aria-labelledby="sn-tab-references" hidden={workTab !== 'references'} role="tabpanel">
           {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <><Facts key={`facts:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} /><Voices key={`voices:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} changed={applyBook} /></>}
           </div>
           <div id="sn-panel-assessment" aria-labelledby="sn-tab-assessment" hidden={workTab !== 'assessment'} role="tabpanel">
-          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Reviews key={`reviews:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} t={t} revisionHint={refresh} revised={() => { setRefresh(value => value + 1); setWorkTab('revisions') }} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
+          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Reviews key={`reviews:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} t={t} revisionHint={`${refresh}:${workTab === 'assessment'}`} revised={id => { setPreferredProposal(id); setRefresh(value => value + 1); setWorkTab('revisions') }} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
           </div>
         </>}
       </>}

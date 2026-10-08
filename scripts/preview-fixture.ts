@@ -3,12 +3,13 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
-export const inject = ['workspaceController', 'sessionController', 'sessions', 'agentPresets', 'superNovel', 'llm']
+export const inject = ['workspaceController', 'sessionController', 'sessions', 'agentPresets', 'superNovel', 'llm', 'settings']
 export async function apply(ctx, config = {}) {
+  if (config.locale === 'en') await ctx.settings.update('locale', { preference: 'en' })
   const roster = await ctx.agentPresets.list()
   assert.equal(ctx.agentPresets.defaultId, 'standard')
   assert(!roster.some(row => row.broken))
-  await writeFile('.test-output/profile-check.json', JSON.stringify({
+  await writeFile(resolve(process.env.DSH_HOME, '../profile-check.json'), JSON.stringify({
     defaultId: ctx.agentPresets.defaultId, presets: roster.map(row => row.id),
     setup: await ctx.superNovel.status(new AbortController().signal),
   }, null, 2))
@@ -29,4 +30,7 @@ export async function apply(ctx, config = {}) {
     const { apply } = await import('./preview-generation.ts')
     await apply(ctx)
   }
+  await writeFile(resolve(process.env.DSH_HOME, '../sessions-check.json'), JSON.stringify({
+    items: (await ctx.sessionController.list({})).items.map(item => ({ sessionId: item.sessionId, blank: item.blank })),
+  }))
 }

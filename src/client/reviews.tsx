@@ -41,7 +41,7 @@ export function Reviews({ api, sessionId, book, chapterId, entry, writable, dirt
   const revise = issue => action(async signal => {
     const id = identity({ reviewId: view.reviewId, issueId: issue.issueId })
     const result = unwrap(await api.reviseIssue(sessionId, book.bookId, view.reviewId, issue.issueId, id, signal))
-    if (live.current) { setProposalId(result.proposalId); revised() }
+    if (live.current) { setProposalId(result.proposalId); revised(result.proposalId) }
   })
   const locateIssue = issue => {
     if (!view.proposalId) { locate(issue.start, issue.end); return }
