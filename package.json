@@ -1,6 +1,6 @@
 {
   "name": "dsh-super-novel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local novel writing with chapter candidates and author-approved changes for DeepSeek Harness.",
   "type": "module",
   "license": "Apache-2.0",
@@ -38,6 +38,8 @@
     "lib/typert.remote-client.d.ts",
     "presets",
     "cordis.patch.yml",
+    "scripts/doctor.mjs",
+    "screenshots.json",
     "README.md",
     "docs/README.md",
     "docs/usage.md",
@@ -53,9 +55,10 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.host.json --noEmit",
     "build": "tsc -p tsconfig.host.json && node --experimental-strip-types scripts/build.ts",
-    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "test": "node scripts/test.mjs",
     "dev:link-harness": "node --experimental-strip-types scripts/link-harness.ts",
-    "pack:check": "npm pack --dry-run",
+    "doctor": "node scripts/doctor.mjs",
+    "pack:check": "npm run build && node scripts/check-package.mjs",
     "prepack": "npm run build"
   },
   "engines": {

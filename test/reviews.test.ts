@@ -42,6 +42,26 @@ test('missing model or context cannot claim a passed review; review queries neve
   assert.equal((await f.reviews.list(f.book.bookId, f.chapterId)).length, 2)
   assert.equal((await f.books.readChapter(f.book.bookId, f.chapterId)).content, f.text)
 })
+test('review prompt defines completed checks separately from issue severity, and invalid dimension states stay unknown', async t => {
+  const f = await fixture(t)
+  const issue = { dimension: 'language', severity: 'error', message: '补全占位符', suggestion: '写成动作', quote: '[TODO]', start: f.text.indexOf('[TODO]'), end: f.text.indexOf('[TODO]') + 6, references: [] }
+  const generate = async prompt => {
+    const input = JSON.parse(prompt)
+    assert.deepEqual(Object.keys(input.dimensionStates).sort(), ['checked', 'degraded', 'unknown'])
+    return fixed([issue], input.format.dimensions.map(item => ({ ...item, state: 'checked' })))(prompt)
+  }
+  const complete = await f.reviews.run(f.request, generate, signal())
+  assert.equal(complete.state, 'degraded')
+  assert(complete.issues.some(item => item.dimension === 'language' && item.severity === 'error'))
+  assert.equal(complete.dimensions.find(item => item.dimension === 'language')!.state, 'checked')
+  for (const state of ['error', 'warning', 'passed', 'failed']) {
+    const dimensions = checked().map(item => item.dimension === 'language' ? { ...item, state } : item)
+    const invalid = await f.reviews.run({ ...f.request, reviewId: randomUUID() }, fixed([issue], dimensions), signal())
+    assert.equal(invalid.state, 'unknown')
+    assert.equal(invalid.reason, 'invalid-output')
+    assert(invalid.issues.every(item => item.dimension === 'mechanical'))
+  }
+})
 test('fabricated citations, duplicate dimensions, malformed output and unfinished calls remain unknown', async t => {
   const f = await fixture(t)
   const issue = { dimension: 'continuity', severity: 'error', message: '冲突', suggestion: '核对', quote: '伪造', start: 0, end: 2, references: [] }

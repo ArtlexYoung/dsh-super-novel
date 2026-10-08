@@ -3,6 +3,7 @@ import { lstat, mkdir, open, realpath, rename, rm, rmdir } from 'node:fs/promise
 import { randomUUID } from 'node:crypto'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { BookError } from '../domain/books.js'
+import { publishFile, syncDirectory } from './file-publication.js'
 
 export interface FileState { readonly exists: boolean; readonly text: string }
 
@@ -72,8 +73,7 @@ export class BookFiles {
     if (current.exists !== before.exists || current.text !== before.text) throw new BookError('revision-conflict')
     const path = await this.path(name)
     await rm(path)
-    const directory = await open(dirname(path), 'r')
-    try { await directory.sync() } finally { await directory.close() }
+    await syncDirectory(dirname(path))
   }
 
   /** Check immediately before publication; a journal retains both versions. */
@@ -81,15 +81,16 @@ export class BookFiles {
     const path = await this.path(name)
     const temporary = `${path}.tmp-${randomUUID()}`
     const handle = await open(temporary, 'wx', 0o600)
-    try { await handle.writeFile(text, 'utf8'); await handle.sync() }
-    finally { await handle.close() }
     try {
-      const current = await this.read(name, 32 * 1024 * 1024)
-      if (current.exists !== before.exists || current.text !== before.text) throw new BookError('revision-conflict')
-      await this.path(name)
-      await rename(temporary, path)
-      const directory = await open(dirname(path), 'r')
-      try { await directory.sync() } finally { await directory.close() }
+      try { await handle.writeFile(text, 'utf8'); await handle.sync() }
+      finally { await handle.close() }
+      await publishFile(async () => {
+        const current = await this.read(name, 32 * 1024 * 1024)
+        if (current.exists !== before.exists || current.text !== before.text) throw new BookError('revision-conflict')
+        await this.path(name)
+        await rename(temporary, path)
+      })
+      await syncDirectory(dirname(path))
     } finally { await rm(temporary, { force: true }) }
   }
 

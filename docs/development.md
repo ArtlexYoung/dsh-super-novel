@@ -31,7 +31,8 @@ npm run pack:check
 | `npm run typecheck` | 检查 Host TypeScript 类型 |
 | `npm run build` | 编译 Host、浏览器代码及官方 Typert/Remote 产物 |
 | `npm test` | 检查作品保存/恢复、候选采纳/取消/冲突、模型路由、权限、预设与组合加载 |
-| `npm run pack:check` | 构建并查看 npm 文件清单 |
+| `npm run doctor` | 只读检查 Node、编译文件和已解析 peer 版本 |
+| `npm run pack:check` | 构建，检查实际包清单、exports、截图及禁止文件 |
 | `npm pack` | 构建并生成可安装 tarball |
 
 作品界面的隔离浏览器验证：
@@ -73,3 +74,7 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 `PLAN.md`、`MEMORY.md`、`TASKS.md`、`.development/` 是本地过程资料；不跟踪、不打包。`eval/`、`.test-output/` 和 `.build/` 保存本地评测、截图和构建暂存，也不发布。
 
 发布前核对版本、文件清单，并在独立 profile 安装实际 tarball。npm 发布与市场收录分别执行；`npm pack` 不会发布。旧版本准备记录见 [0.0.1 发布说明](RELEASE-0.0.1.md)。
+
+`screenshots.json` 声明三张本仓库的真实安装包截图，图中版本和固定响应限制见 README。源码不包含编译产物，市场安装需已构建 tarball；取得 GitHub Release 下载地址后再投稿，不把源码地址当成可直接安装的发布包。
+
+平台补验可在对应机器执行上面的类型、构建、测试和包检查，再运行实际包 workflow/reopen。Windows 的目录 fsync 限制及文件占用重试已有模拟回归，不能替代 Windows/Linux、Desktop 实机验收。POSIX 权限测试在 Windows 跳过，跳过项必须记录。

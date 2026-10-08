@@ -186,8 +186,13 @@ test('symlink paths, cross-book chapters, malformed formats and future versions 
   const sentinel = join(root, 'sentinel.md')
   await writeFile(sentinel, '保留')
   await rm(path)
-  await symlink(sentinel, path)
-  await assert.rejects(store.readChapter(book.bookId, create.chapterId), matches('unsafe-path'))
+  try {
+    await symlink(sentinel, path)
+    await assert.rejects(store.readChapter(book.bookId, create.chapterId), matches('unsafe-path'))
+  } catch (error) {
+    if (process.platform !== 'win32' || error.code !== 'EPERM') throw error
+    t.diagnostic('Windows symlink privilege unavailable; symlink boundary not checked')
+  }
   assert.equal(await readFile(sentinel, 'utf8'), '保留')
   const manifest = join(root, 'novels', book.bookId, 'project.json')
   await writeFile(manifest, '{bad')
@@ -196,10 +201,16 @@ test('symlink paths, cross-book chapters, malformed formats and future versions 
   await assert.rejects(store.readBook(book.bookId), matches('unsupported-format'))
 })
 
-test('abort, oversized text and unwritable directories fail before publication', async t => {
-  const { root, store, book } = await fixture(t)
+test('abort and oversized text fail before publication', async t => {
+  const { store, book } = await fixture(t)
   await assert.rejects(store.mutate(request(book), AbortSignal.abort()), { name: 'AbortError' })
   await assert.rejects(store.mutate(request(book, { content: 'a'.repeat(4 * 1024 * 1024 + 1) }), signal()))
+  assert.equal((await store.readBook(book.bookId)).chapters.length, 0)
+  assert.equal((await store.readBook(book.bookId)).recoveryRequired, false)
+})
+
+test('unwritable directories fail before publication', { skip: process.platform === 'win32' || process.getuid?.() === 0 ? 'POSIX permission enforcement unavailable' : false }, async t => {
+  const { root, store, book } = await fixture(t)
   const folder = join(root, 'novels', book.bookId)
   await chmod(folder, 0o500)
   try { await assert.rejects(store.mutate(request(book), signal()), error => ['EACCES', 'EPERM'].includes(error.code)) }

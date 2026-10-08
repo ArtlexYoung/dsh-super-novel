@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { withWorkspace } from './browser-workspace.ts'
 const output = resolve(process.argv[2]), mode = process.argv[3] ?? 'workflow'
+const targetPath = join(output, 'workflow-book-id')
 const calls = () => readFile(join(output, 'generation-calls.json'), 'utf8').then(text => JSON.parse(text).length, () => 0)
 const before = await calls()
 await withWorkspace(output, async page => {
@@ -17,6 +18,8 @@ await withWorkspace(output, async page => {
   if (mode === 'workflow') {
     await page.getByLabel('Book title', { exact: true }).fill('完整渡河'); await page.getByRole('button', { name: 'New book', exact: true }).click()
     await page.getByLabel('Chapter title', { exact: true }).fill('第一章'); await page.getByRole('button', { name: 'New chapter', exact: true }).click(); await body.waitFor()
+    const bookId = await page.getByLabel('Book', { exact: true }).inputValue()
+    assert(bookId)
     await page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name: 'Materials and plans', exact: true }).click()
     await page.getByLabel('Material type', { exact: true }).selectOption('chapter-outline')
     await page.getByLabel('Related chapter', { exact: true }).selectOption({ label: '第一章' })
@@ -58,8 +61,9 @@ await withWorkspace(output, async page => {
     await proposals.getByRole('button', { name: 'Stop', exact: true }).click(); await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Incomplete$/ }).waitFor()
     assert(await proposals.getByRole('button', { name: 'Accept', exact: true }).isDisabled())
     assert.equal(await calls() - before, 8)
+    await writeFile(targetPath, bookId)
   } else {
-    await page.getByLabel('Book', { exact: true }).selectOption({ label: '完整渡河' })
+    await page.getByLabel('Book', { exact: true }).selectOption(await readFile(targetPath, 'utf8'))
     await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click(); await tab('Chapters'); await body.waitFor(); assert((await body.inputValue()).includes('左腕仍藏在袖中'))
     await tab('Revisions'); await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Incomplete$/ }).waitFor()
     await proposals.getByRole('checkbox', { name: 'Use previous chapter facts', exact: true }).check(); await proposals.getByText(/Fact context complete/).waitFor()
@@ -69,7 +73,9 @@ await withWorkspace(output, async page => {
     console.log(`PASS ${mode}: packed-plugin coexistence writing workflow; appearance checked separately.`)
     return
   }
-  await tab('Chapters'); await page.getByRole('button', { name: 'Fullscreen', exact: true }).click(); await page.setViewportSize({ width: 900, height: 800 })
+  await tab('Chapters')
+  await page.getByRole('button', { name: 'Settings', exact: true }).click(); await page.getByRole('button', { name: 'Light', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click(); await page.setViewportSize({ width: 900, height: 800 })
   await tabs.scrollIntoViewIfNeeded(); await page.screenshot({ path: join(output, 'workflow-en-light.png') })
   assert(await page.locator('.super-novel-setup').evaluate(element => element.scrollWidth <= element.clientWidth))
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click(); await page.setViewportSize({ width: 1440, height: 1000 })

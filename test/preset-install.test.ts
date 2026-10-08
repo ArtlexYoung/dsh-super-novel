@@ -62,11 +62,12 @@ test('symlink roots, target directories and files are rejected', async t => {
   const f = await fixture(t)
   const outside = join(f.dir, 'outside')
   await mkdir(outside)
-  await symlink(outside, f.root)
+  try { await symlink(outside, f.root, 'dir') }
+  catch (error) { if (process.platform === 'win32' && error.code === 'EPERM') { t.skip('Windows symlink privilege unavailable'); return }; throw error }
   assert.equal((await f.installer.enable(signal())).reason, 'unsafe-root')
   await rm(f.root)
   await mkdir(f.root)
-  await symlink(outside, join(f.root, PRESET_ID))
+  await symlink(outside, join(f.root, PRESET_ID), 'dir')
   assert.equal((await f.installer.enable(signal())).reason, 'unsafe-target')
   await rm(join(f.root, PRESET_ID))
   await f.installer.enable(signal())
@@ -114,7 +115,7 @@ test('tilde roots match host discovery; relative roots and truncated files are e
   assert.equal((await ambiguous.enable(signal())).reason, 'relative-user-root')
 })
 
-test('an unwritable root fails without leaving a lock or deleting existing data', async t => {
+test('an unwritable root fails without leaving a lock or deleting existing data', { skip: process.platform === 'win32' || process.getuid?.() === 0 ? 'POSIX permission enforcement unavailable' : false }, async t => {
   const f = await fixture(t)
   const { chmod } = await import('node:fs/promises')
   await mkdir(f.root)

@@ -47,7 +47,10 @@ export class SuperNovel extends TypertRemoteService {
   constructor(ctx: Context) {
     super(ctx, 'superNovel', { namespace: 'superNovel' })
     this.installer = new PresetInstaller(ctx.agentPresets, fileURLToPath(new URL('../presets/dsh-super-novel/', import.meta.url)), JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version)
-    ctx.effect(() => () => { this.lifetime.abort(); return this.tasks.dispose() })
+    ctx.effect(() => async () => {
+      this.lifetime.abort()
+      await Promise.allSettled([this.tasks.dispose(), ...this.extractions.values(), ...this.reviews.values()])
+    })
   }
 
   /**
