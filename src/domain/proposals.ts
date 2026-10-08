@@ -11,6 +11,7 @@ export const generationRequestSchema = z.strictObject({
   materials: contentSchema.pipe(z.string().max(65_536)),
   start: z.int().nonnegative(), end: z.int().nonnegative(),
   materialIds: z.array(idSchema).max(100).refine(ids => new Set(ids).size === ids.length).optional(),
+  useFacts: z.boolean().optional(), knowledgeScope: z.union([idSchema, z.literal('reader')]).optional(),
 })
 const materialSchema = z.strictObject({ chapterId: idSchema, title: titleSchema, kind: documentKindSchema,
   revision: z.int().positive(), hash: digest, content: contentSchema })
@@ -28,6 +29,8 @@ export const proposalSchema = z.strictObject({
   baseline: contentSchema, baselineChapterRevision: z.int().positive(),
   replacement: contentSchema, candidateHash: digest, elapsedMs: z.int().nonnegative(), usage: usageSchema,
   documentKind: documentKindSchema.optional(), context: z.array(materialSchema).max(100).optional(),
+  factContext: z.strictObject({ content: contentSchema, scope: z.union([idSchema, z.literal('reader')]),
+    sources: z.array(z.strictObject({ chapterId: idSchema, revision: z.int().positive(), hash: digest, recordId: idSchema, recordHash: digest })).max(10_000) }).optional(),
 })
 export type Proposal = z.infer<typeof proposalSchema>
 
@@ -82,5 +85,6 @@ export function generationPrompt(proposal: Proposal): string {
     authorMaterials: proposal.request.materials, chapter: proposal.baseline,
     ...(proposal.documentKind && proposal.documentKind !== 'chapter' ? { documentKind: proposal.documentKind, planningTask: 'Write only the requested planning document. Planned events are not established story facts.' } : {}),
     ...(proposal.context?.length ? { selectedMaterials: proposal.context, planningBoundary: 'Plans describe possible future events, not events that have already happened.' } : {}),
+    ...(proposal.factContext ? { establishedFacts: proposal.factContext.content, knowledgeScope: proposal.factContext.scope } : {}),
     selection: { start: proposal.request.start, end: proposal.request.end, text: proposal.baseline.slice(proposal.request.start, proposal.request.end) } })
 }

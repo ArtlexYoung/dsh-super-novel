@@ -9,6 +9,7 @@ import { BookFiles } from './book-files.js'
 import { BookStore } from './book-store.js'
 import { generationMachine, ownerRunning } from './proposal-runtime.js'
 import type { GenerationOwner } from './proposal-runtime.js'
+import { FactStore } from './fact-store.js'
 
 const queues = new Map<string, Promise<void>>()
 
@@ -59,19 +60,23 @@ export class ProposalStore {
       for (const id of request.materialIds ?? []) {
         const selected = await this.books.readChapter(request.bookId, id)
         const document = selected.book.chapters.find(item => item.chapterId === id)!
-        if (!document.kind || document.kind === 'chapter' || id === request.chapterId) throw new BookError('invalid-material')
+        if (!document.kind || document.kind === 'chapter' || document.kind === 'facts' || id === request.chapterId) throw new BookError('invalid-material')
         if (selected.externallyModified || selected.book.revision !== request.expectedRevision) throw new BookError('revision-conflict')
         if (!selected.content.trim()) throw new BookError('material-empty')
         context.push({ chapterId: id, title: document.title, kind: document.kind, revision: document.revision, hash: selected.hash, content: selected.content })
       }
       const now = Date.now()
+      const facts = request.useFacts ? await (await FactStore.at(this.files.root, this.workspaceId, this.books)).context(request.bookId, request.chapterId, request.knowledgeScope ?? 'reader', 128 * 1024) : undefined
+      if (facts && facts.state !== 'complete') throw new BookError(facts.state === 'over-budget' ? 'context-too-large' : 'facts-incomplete')
+      if ((await this.books.readBook(request.bookId)).revision !== request.expectedRevision) throw new BookError('revision-conflict')
       const proposal: Proposal = { schemaVersion: 1, workspaceId: this.workspaceId, sessionId, owner, request,
         requestHash: hash(json(request)), acceptanceId: randomUUID(), baseline: chapter.content,
         baselineChapterRevision: chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.revision,
         createdAt: now, updatedAt: now, state: 'generating', reason: '', replacement: '',
         candidateHash: '', elapsedMs: 0, usage: { state: 'unknown' },
         ...(chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind ? { documentKind: chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind } : {}),
-        ...(request.materialIds ? { context } : {}) }
+        ...(request.materialIds ? { context } : {}),
+        ...(facts ? { factContext: { content: json({ facts: facts.facts, summaries: facts.summaries }), scope: request.knowledgeScope ?? 'reader', sources: [...facts.sources] } } : {}) }
       proposal.candidateHash = hash(candidate(proposal))
       if (Buffer.byteLength(generationPrompt(proposal), 'utf8') > 256 * 1024) throw new BookError('context-too-large')
       await this.files.directory(join(this.folder(request.bookId), 'proposals'))
@@ -114,6 +119,10 @@ export class ProposalStore {
     for (const item of proposal.context ?? []) {
       const current = await this.books.readChapter(bookId, item.chapterId)
       if (current.hash !== item.hash || current.externallyModified) return proposalView(proposal, 'expired', 'revision-conflict', false)
+    }
+    for (const item of proposal.factContext?.sources ?? []) {
+      const source = await this.books.readChapter(bookId, item.chapterId), record = await this.books.readChapter(bookId, item.recordId)
+      if (source.hash !== item.hash || source.book.chapters.find(chapter => chapter.chapterId === item.chapterId)?.revision !== item.revision || record.hash !== item.recordHash || source.externallyModified || record.externallyModified) return proposalView(proposal, 'expired', 'revision-conflict', false)
     }
     return proposalView(proposal, proposal.state === 'generating' && !active ? 'interrupted' : proposal.state,
       proposal.state === 'generating' && !active ? 'host-restarted' : proposal.reason, false)

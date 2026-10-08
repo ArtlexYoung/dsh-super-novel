@@ -3,6 +3,7 @@ import { IconPlusOutline16, IconEditOutline16, IconRefreshOutline16, IconCheckOu
 import { Proposals } from './proposals.js'
 import { ChapterRecovery, InterruptedRecovery } from './history.js'
 import { materialKinds, materialTemplate } from './materials.js'
+import { Facts } from './facts.js'
 
 export function unwrap(result) {
   if (!result.ok) {
@@ -48,10 +49,12 @@ export function Books({ api, sessionId, t }) {
   const mounted = useRef(true)
   const requestIds = useRef(new Map())
   const sequence = useRef(0)
+  const editor = useRef(null)
+  const entryIdentity = useRef('')
   const book = library?.books.find(item => item.bookId === bookId)
   const writable = library?.writable && !busy && !book?.recoveryRequired
   const currentChapter = book?.chapters.find(item => item.chapterId === chapterId)
-  const visible = book?.chapters.filter(item => documents === 'chapters' ? !item.kind || item.kind === 'chapter' : item.kind && item.kind !== 'chapter') ?? []
+  const visible = book?.chapters.filter(item => documents === 'chapters' ? !item.kind || item.kind === 'chapter' : item.kind && item.kind !== 'chapter' && item.kind !== 'facts') ?? []
   const dirty = entry && (entry.content !== entry.diskContent || entry.externallyModified)
   const stale = entry && (entry.bookRevision !== book?.revision || entry.baseHash !== entry.diskHash)
   const entryKey = entry && draftKey(library.workspaceId, bookId, chapterId)
@@ -79,7 +82,9 @@ export function Books({ api, sessionId, t }) {
   useEffect(() => {
     const controller = new AbortController()
     const generation = ++sequence.current
-    setEntry(null)
+    const identity = `${library?.workspaceId ?? ''}:${bookId}:${chapterId}`
+    if (entryIdentity.current !== identity || !book || book.recoveryRequired) setEntry(null)
+    entryIdentity.current = identity
     setSelection({ start: 0, end: 0 })
     if (!book) return () => controller.abort()
     try { localStorage.setItem(`super-novel.selection:${library.workspaceId}`, JSON.stringify({ bookId, chapterId, documents })) } catch {}
@@ -214,13 +219,14 @@ export function Books({ api, sessionId, t }) {
           </div>
           {stale && <p role="alert">{t('stale')}</p>}
           {notice && <p className="sn-notice" role="status">{t(notice)}</p>}
-          {entry && (editing ? <textarea aria-label={t('body')} spellCheck={false} value={entry.content} readOnly={!writable} onSelect={event => setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd })} onChange={event => storeDraft({ ...entry, content: event.target.value, operationId: crypto.randomUUID() })} /> : <pre className="sn-preview" aria-label={t('body')}>{entry.content}</pre>)}
+          {entry && (editing ? <textarea ref={editor} aria-label={t('body')} spellCheck={false} value={entry.content} readOnly={!writable} onSelect={event => setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd })} onChange={event => storeDraft({ ...entry, content: event.target.value, operationId: crypto.randomUUID() })} /> : <pre className="sn-preview" aria-label={t('body')}>{entry.content}</pre>)}
           <div className="sn-row sn-recovery-actions"><button disabled={!entry || busy} onClick={readDisk}>{t('reloadDisk')}</button><button disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</button></div>
           {entry && <ChapterRecovery key={`history:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} stale={stale} t={t} onBusy={setBusy} saved={() => {
             try { localStorage.removeItem(entryKey) } catch { setError('draftFailed'); return }
             setRefresh(value => value + 1)
           }} />}
-          {entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} adopted={() => setRefresh(value => value + 1)} />}
+          {entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} />}
+          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Facts key={`facts:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} locate={(start, end) => { setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
         </>}
       </>}
     </>}

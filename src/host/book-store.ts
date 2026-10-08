@@ -5,6 +5,7 @@ import { BookError, contentSchema, documentKindSchema, hash, idSchema, json, par
 import type { Book, Transaction } from '../domain/books.js'
 import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, InterruptedChapterSave, SettleInterruptedSaveRequest } from '../types.js'
 import { BookFiles } from './book-files.js'
+import { parseFactDocument, validateFacts } from '../domain/facts.js'
 
 const ROOT = 'novels'
 const mutationSchema = z.strictObject({
@@ -207,6 +208,19 @@ export class BookStore {
         }
       }
       // Revalidate generated data too: limits are enforced before a journal is published.
+      const target = next.chapters.find(item => item.chapterId === request.chapterId)
+      if ((request.action === 'create' || request.action === 'save') && target?.kind === 'facts') {
+        const document = parseFactDocument(request.content)
+        const source = await this.readChapter(request.bookId, document.sourceChapterId)
+        const sourceMetadata = book.chapters.find(item => item.chapterId === document.sourceChapterId)
+        if (target.linkedChapterId !== document.sourceChapterId || !sourceMetadata || (sourceMetadata.kind && sourceMetadata.kind !== 'chapter') || sourceMetadata.revision !== document.sourceRevision || source.externallyModified) throw new BookError('fact-stale')
+        validateFacts(document, source.content)
+        for (const fact of document.facts) {
+          const scope = fact.scope
+          if (scope.kind === 'character' && !book.chapters.some(item => item.chapterId === scope.characterId && item.kind === 'character')) throw new BookError('invalid-evidence')
+        }
+        if (next.chapters.some(item => item.chapterId !== target.chapterId && item.kind === 'facts' && item.linkedChapterId === target.linkedChapterId)) throw new BookError('operation-conflict')
+      }
       parseBook(json(next), book.bookId)
       return await this.commit({ schemaVersion: 1, operationId: request.operationId, bookId: book.bookId, requestHash, state: 'prepared', before: file.text, after: next, changes, ...(origin ? { source: origin } : {}) }, signal)
     })

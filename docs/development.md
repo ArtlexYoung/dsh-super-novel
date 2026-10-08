@@ -56,6 +56,8 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 资料与规划用 `scripts/browser-materials.ts` 检查新建场景、规划候选采纳、选择资料起草和重启。同样使用 `--generation` 的全新隔离 profile，不调用真实 provider。
 
+事实工作流用 `scripts/browser-facts.ts` 验证提取、采纳、引用定位、下一章上下文及旧章变化后过期。固定响应只能证明流程，事实含义与连续写作质量仍需真实模型和人工评阅。
+
 ## 打包与发布
 
 安装包包含编译产物、预设、bundle patch、README、文档和许可证。使用者安装 tarball 不需要生成器或相邻源码仓库。

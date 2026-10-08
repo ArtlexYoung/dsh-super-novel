@@ -1,5 +1,9 @@
 export const zh = {
   title: '小说工作台', intro: '作品与章节',
+  facts: '事实与摘要', extractFacts: '提取事实候选', acceptFacts: '采纳事实', factsPending: '本章事实待补全', factsAccepted: '本章事实已采纳', manualFact: '从选区添加事实',
+  subject: '对象', predicate: '状态或事件', factValue: '事实内容', knowledgeScope: '知情范围', contextScope: '上下文知情范围', reader: '读者', unknownCharacter: '未知人物', saveFactCandidate: '保存事实候选', factRecords: '事实记录', locateEvidence: '定位原文',
+  useFacts: '使用前章事实', 'context-complete': '事实上下文完整', 'context-degraded': '前章事实待补全', 'context-expired': '前章事实已过期', 'context-over-budget': '事实超出预算', 'context-loading': '正在检查事实',
+  'fact-proposal-not-found': '未找到事实候选。', 'fact-stale': '事实来源已变化，请重新提取。', 'fact-finalized': '事实候选已经处理。', 'invalid-evidence': '引用或知情范围无效，事实未保存。', 'facts-incomplete': '前章事实缺失或过期，请先补全。',
   chapters: '正文', materialsView: '资料与规划', documentView: '作品文档', noMaterials: '暂无资料', materialType: '资料类型', createMaterial: '新建资料', relatedChapter: '关联章节', none: '不关联', templateLanguage: 'zh',
   seed: '故事种子', 'book-card': '书卡', character: '人物', world: '世界', outline: '总纲', 'chapter-outline': '章纲', scene: '场景', selectMaterials: '选用已保存资料',
   'invalid-material': '资料不属于本书或类型无效。', 'material-empty': '选中的资料为空，请填写或取消选择。',
@@ -59,6 +63,10 @@ export const zh = {
 
 export const en = {
   title: 'Novel workspace', intro: 'Books and chapters',
+  facts: 'Facts and summary', extractFacts: 'Extract fact candidate', acceptFacts: 'Accept facts', factsPending: 'Chapter facts need completion', factsAccepted: 'Chapter facts accepted', manualFact: 'Add fact from selection',
+  subject: 'Subject', predicate: 'State or event', factValue: 'Fact value', knowledgeScope: 'Knowledge scope', contextScope: 'Context knowledge scope', reader: 'Reader', unknownCharacter: 'Unknown character', saveFactCandidate: 'Save fact candidate', factRecords: 'Fact records', locateEvidence: 'Locate source',
+  useFacts: 'Use previous chapter facts', 'context-complete': 'Fact context complete', 'context-degraded': 'Previous chapter facts need completion', 'context-expired': 'Previous chapter facts expired', 'context-over-budget': 'Facts exceed budget', 'context-loading': 'Checking facts',
+  'fact-proposal-not-found': 'Fact candidate not found.', 'fact-stale': 'The source changed. Extract facts again.', 'fact-finalized': 'This fact candidate has already been processed.', 'invalid-evidence': 'Invalid quote or knowledge scope. Facts were not saved.', 'facts-incomplete': 'Previous chapter facts are missing or expired. Complete them first.',
   chapters: 'Chapters', materialsView: 'Materials and plans', documentView: 'Book documents', noMaterials: 'No materials yet', materialType: 'Material type', createMaterial: 'New material', relatedChapter: 'Related chapter', none: 'None', templateLanguage: 'en',
   seed: 'Story seed', 'book-card': 'Book card', character: 'Character', world: 'World', outline: 'Outline', 'chapter-outline': 'Chapter outline', scene: 'Scene', selectMaterials: 'Select saved materials',
   'invalid-material': 'The material belongs to another book or has an invalid type.', 'material-empty': 'Selected material is empty. Fill it or deselect it.',

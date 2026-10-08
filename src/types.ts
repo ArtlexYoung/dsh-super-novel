@@ -12,7 +12,7 @@ export interface ChapterSummary {
   readonly kind?: DocumentKind
   readonly linkedChapterId?: string
 }
-export type DocumentKind = 'chapter' | 'seed' | 'book-card' | 'character' | 'world' | 'outline' | 'chapter-outline' | 'scene'
+export type DocumentKind = 'chapter' | 'seed' | 'book-card' | 'character' | 'world' | 'outline' | 'chapter-outline' | 'scene' | 'facts'
 export interface BookSnapshot {
   readonly schemaVersion: 1
   readonly bookId: string
@@ -63,6 +63,8 @@ export interface GenerateChapterRequest {
   readonly start: number
   readonly end: number
   readonly materialIds?: readonly string[]
+  readonly useFacts?: boolean
+  readonly knowledgeScope?: string
 }
 export interface MaterialSnapshot {
   readonly chapterId: string
@@ -71,6 +73,62 @@ export interface MaterialSnapshot {
   readonly revision: number
   readonly hash: string
   readonly content: string
+}
+export type KnowledgeScope = { readonly kind: 'reader' } | { readonly kind: 'character'; readonly characterId: string }
+export interface EvidenceFact {
+  readonly factId: string
+  readonly subject: string
+  readonly predicate: string
+  readonly value: string
+  readonly scope: KnowledgeScope
+  readonly sourceChapterId: string
+  readonly sourceRevision: number
+  readonly sourceHash: string
+  readonly quote: string
+  readonly start: number
+  readonly end: number
+}
+export interface FactProposal {
+  readonly proposalId: string
+  readonly bookId: string
+  readonly sourceChapterId: string
+  readonly sourceRevision: number
+  readonly sourceHash: string
+  readonly state: 'review' | 'accepted' | 'rejected' | 'expired'
+  readonly reason: string
+  readonly facts: readonly EvidenceFact[]
+  readonly createdAt: number
+  readonly factsHash: string
+  readonly summary?: EvidenceSummary
+  readonly usage: GenerationUsage
+  readonly elapsedMs: number
+  readonly coverage: 'chapter' | 'selection'
+}
+export interface EvidenceSummary { readonly text: string; readonly quote: string; readonly start: number; readonly end: number }
+export interface ProposeFactsRequest {
+  readonly proposalId: string
+  readonly bookId: string
+  readonly sourceChapterId: string
+  readonly expectedRevision: number
+  readonly expectedHash: string
+  readonly facts: readonly Omit<EvidenceFact, 'factId' | 'sourceRevision' | 'sourceHash'>[]
+  readonly summary?: EvidenceSummary
+  readonly coverage?: 'chapter' | 'selection'
+}
+export interface GenerateFactsRequest {
+  readonly proposalId: string
+  readonly bookId: string
+  readonly sourceChapterId: string
+  readonly expectedRevision: number
+  readonly expectedHash: string
+}
+export interface FactContext {
+  readonly facts: readonly EvidenceFact[]
+  readonly state: 'complete' | 'degraded' | 'expired' | 'over-budget'
+  readonly bytes: number
+  readonly sources: readonly { readonly chapterId: string; readonly revision: number; readonly hash: string; readonly recordId: string; readonly recordHash: string }[]
+  readonly missingChapterIds: readonly string[]
+  readonly summaries: readonly { readonly chapterId: string; readonly text: string }[]
 }
 export interface ProposalSummary {
   readonly proposalId: string

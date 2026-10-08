@@ -11,16 +11,20 @@ import { storageResult, workspaceBooks } from './host/workspace-books.js'
 import type { GenerateChapterRequest, ProposalDecisionRequest, ProposalSummary, ProposalView } from './types.js'
 import { ProposalStore } from './host/proposal-store.js'
 import { ProposalTasks } from './host/proposal-tasks.js'
-import { hostChapterGenerator } from './host/chapter-generator.js'
+import { hostChapterGenerator, hostTextGenerator } from './host/chapter-generator.js'
 import { ChapterHistory } from './host/chapter-history.js'
 import { ChapterConflicts } from './host/chapter-conflicts.js'
 import type { ChapterHistorySummary, ChapterHistoryVersion, RestoreChapterRequest, ChapterConflict, PreserveConflictRequest, ResolveConflictRequest } from './types.js'
 import type { InterruptedChapterSave, SettleInterruptedSaveRequest } from './types.js'
+import type { FactProposal, ProposeFactsRequest, FactContext, GenerateFactsRequest } from './types.js'
+import { FactStore } from './host/fact-store.js'
+import { extractFacts } from './host/fact-extraction.js'
 
 export type { PresetStatus } from './types.js'
 export type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, LibrarySnapshot } from './types.js'
 export type { GenerateChapterRequest, ProposalDecisionRequest, ProposalSummary, ProposalView } from './types.js'
 export type { ChapterHistorySummary, ChapterHistoryVersion, RestoreChapterRequest, ChapterConflict, PreserveConflictRequest, ResolveConflictRequest } from './types.js'
+export type { FactProposal, ProposeFactsRequest, FactContext } from './types.js'
 
 declare module '@deepseek-ai/cordis' {
   interface Context { superNovel: SuperNovel }
@@ -31,11 +35,13 @@ export class SuperNovel extends TypertRemoteService {
   static inject = ['agentPresets']
   private readonly installer: PresetInstaller
   private readonly tasks = new ProposalTasks()
+  private readonly lifetime = new AbortController()
+  private readonly extractions = new Map<string, Promise<FactProposal>>()
 
   constructor(ctx: Context) {
     super(ctx, 'superNovel', { namespace: 'superNovel' })
     this.installer = new PresetInstaller(ctx.agentPresets, fileURLToPath(new URL('../presets/dsh-super-novel/', import.meta.url)), JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version)
-    ctx.effect(() => () => this.tasks.dispose())
+    ctx.effect(() => () => { this.lifetime.abort(); return this.tasks.dispose() })
   }
 
   /**
@@ -145,6 +151,61 @@ export class SuperNovel extends TypertRemoteService {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
       return await (await ChapterConflicts.at(scope.root, scope.workspaceId, scope.store)).resolve(request, signal)
+    })
+  }
+
+  /** Store an evidence-backed fact candidate; it does not change the chapter. */
+  @Remote
+  async proposeFacts(sessionId: string, request: ProposeFactsRequest, signal: AbortSignal): Promise<FactProposal> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await (await FactStore.at(scope.root, scope.workspaceId, scope.store)).propose(request, signal)
+    })
+  }
+
+  @Remote
+  async factProposals(sessionId: string, bookId: string, chapterId: string, signal: AbortSignal): Promise<FactProposal[]> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await FactStore.at(scope.root, scope.workspaceId, scope.store)).list(bookId, chapterId)
+    })
+  }
+
+  @Remote
+  async acceptFacts(sessionId: string, bookId: string, proposalId: string, expectedHash: string, signal: AbortSignal): Promise<FactProposal> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await (await FactStore.at(scope.root, scope.workspaceId, scope.store)).decide(bookId, proposalId, expectedHash, true, signal)
+    })
+  }
+
+  @Remote
+  async rejectFacts(sessionId: string, bookId: string, proposalId: string, expectedHash: string, signal: AbortSignal): Promise<FactProposal> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await (await FactStore.at(scope.root, scope.workspaceId, scope.store)).decide(bookId, proposalId, expectedHash, false, signal)
+    })
+  }
+
+  /** Explicit read-only model extraction; validated results remain candidates until adoption. */
+  @Remote
+  async generateFacts(sessionId: string, request: GenerateFactsRequest, signal: AbortSignal): Promise<FactProposal> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      const key = `${scope.workspaceId}:${JSON.stringify(request)}`
+      const existing = this.extractions.get(key)
+      if (existing) return await existing
+      const task = extractFacts(scope.store, await FactStore.at(scope.root, scope.workspaceId, scope.store), request, hostTextGenerator(this.ctx, scope.session), AbortSignal.any([signal, this.lifetime.signal, AbortSignal.timeout(300_000)]))
+      this.extractions.set(key, task)
+      try { return await task } finally { if (this.extractions.get(key) === task) this.extractions.delete(key) }
+    })
+  }
+
+  @Remote
+  async factContext(sessionId: string, bookId: string, sourceChapterId: string, scopeName: string, maxBytes: number, signal: AbortSignal): Promise<FactContext> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await FactStore.at(scope.root, scope.workspaceId, scope.store)).context(bookId, sourceChapterId, scopeName, maxBytes)
     })
   }
 

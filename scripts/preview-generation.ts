@@ -16,6 +16,12 @@ export async function apply(ctx) {
       const input = JSON.parse(options.messages[0].content[0].text)
       calls.push({ sessionId: options.sessionId, instruction: input.instruction, chapter: input.chapter, selection: input.selection })
       await writeFile(resolve(output, 'generation-calls.json'), JSON.stringify(calls))
+      if (input.task === 'extract-facts') {
+        const quote = input.chapter.slice(0, Math.min(40, input.chapter.length))
+        yield { type: 'text-delta', index: 0, text: JSON.stringify({ summary: { text: quote, quote, start: 0, end: quote.length }, facts: [{ subject: '主角', predicate: '当前状态', value: quote, scope: { kind: 'reader' }, sourceChapterId: input.chapterId, quote, start: 0, end: quote.length }] }) }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+        return
+      }
       if (input.instruction.includes('[empty]')) { yield { type: 'finish', reason: { kind: 'stop' } }; return }
       yield { type: 'text-delta', index: 0, text: '候选前句。\n' }
       if (input.instruction.includes('[slow]')) {
