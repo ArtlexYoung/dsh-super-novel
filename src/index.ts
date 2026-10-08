@@ -21,6 +21,9 @@ import { FactStore } from './host/fact-store.js'
 import { extractFacts } from './host/fact-extraction.js'
 import type { ReviewRequest, ReviewView } from './types.js'
 import { ReviewStore } from './host/review-store.js'
+import { VoiceStore } from './host/voice-store.js'
+import { BookTransfer } from './host/book-transfer.js'
+import type { AuthorizeVoiceRequest, VoiceSample, ImportRequest, ImportPreview, ExportText } from './types.js'
 
 export type { PresetStatus } from './types.js'
 export type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, LibrarySnapshot } from './types.js'
@@ -201,6 +204,55 @@ export class SuperNovel extends TypertRemoteService {
       const task = extractFacts(scope.store, await FactStore.at(scope.root, scope.workspaceId, scope.store), request, hostTextGenerator(this.ctx, scope.session), AbortSignal.any([signal, this.lifetime.signal, AbortSignal.timeout(300_000)]))
       this.extractions.set(key, task)
       try { return await task } finally { if (this.extractions.get(key) === task) this.extractions.delete(key) }
+    })
+  }
+
+  /** Mechanical checks and isolated model review produce a persistent read-only assessment. */
+  @Remote
+  async voiceSamples(sessionId: string, bookId: string, signal: AbortSignal): Promise<VoiceSample[]> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await new VoiceStore(scope.store).list(bookId)
+    })
+  }
+
+  @Remote
+  async authorizeVoice(sessionId: string, request: AuthorizeVoiceRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await new VoiceStore(scope.store).authorize(request, signal)
+    })
+  }
+
+  @Remote
+  async revokeVoice(sessionId: string, bookId: string, voiceId: string, expectedRevision: number, expectedHash: string, operationId: string, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await new VoiceStore(scope.store).revoke(bookId, voiceId, expectedRevision, expectedHash, operationId, signal)
+    })
+  }
+
+  @Remote
+  async previewImport(sessionId: string, request: ImportRequest, signal: AbortSignal): Promise<ImportPreview> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return (await BookTransfer.at(scope.root, scope.store)).preview(request)
+    })
+  }
+
+  @Remote
+  async importBook(sessionId: string, request: ImportRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await (await BookTransfer.at(scope.root, scope.store)).import(request, signal)
+    })
+  }
+
+  @Remote
+  async exportBook(sessionId: string, bookId: string, chapterIds: string[], signal: AbortSignal): Promise<ExportText> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await BookTransfer.at(scope.root, scope.store)).export(bookId, chapterIds)
     })
   }
 

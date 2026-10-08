@@ -1,6 +1,6 @@
 {
   "name": "dsh-super-novel",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Local novel writing with chapter candidates and author-approved changes for DeepSeek Harness.",
   "type": "module",
   "license": "Apache-2.0",

@@ -11,6 +11,7 @@ import { generationMachine, ownerRunning } from './proposal-runtime.js'
 import type { GenerationOwner } from './proposal-runtime.js'
 import { FactStore } from './fact-store.js'
 import { ReviewStore } from './review-store.js'
+import { VoiceStore } from './voice-store.js'
 
 const queues = new Map<string, Promise<void>>()
 
@@ -55,6 +56,7 @@ export class ProposalStore {
         return { proposal, created: false }
       }
       const chapter = await this.books.readChapter(request.bookId, request.chapterId)
+      if (['facts', 'voice'].includes(chapter.book.chapters.find(item => item.chapterId === request.chapterId)?.kind ?? '')) throw new BookError('invalid-material')
       if (chapter.book.revision !== request.expectedRevision || chapter.hash !== request.expectedHash || chapter.externallyModified) throw new BookError('revision-conflict')
       let baseline = chapter.content, round = 0
       if (request.parentProposalId && !request.reviewId || request.reviewId && !request.issueId || request.issueId && !request.reviewId) throw new BookError('invalid-request')
@@ -71,12 +73,13 @@ export class ProposalStore {
       for (const id of request.materialIds ?? []) {
         const selected = await this.books.readChapter(request.bookId, id)
         const document = selected.book.chapters.find(item => item.chapterId === id)!
-        if (!document.kind || document.kind === 'chapter' || document.kind === 'facts' || id === request.chapterId) throw new BookError('invalid-material')
+        if (!document.kind || document.kind === 'chapter' || document.kind === 'facts' || document.kind === 'voice' || id === request.chapterId) throw new BookError('invalid-material')
         if (selected.externallyModified || selected.book.revision !== request.expectedRevision) throw new BookError('revision-conflict')
         if (!selected.content.trim()) throw new BookError('material-empty')
         context.push({ chapterId: id, title: document.title, kind: document.kind, revision: document.revision, hash: selected.hash, content: selected.content })
       }
       const now = Date.now()
+      const voices = request.voiceIds ? await new VoiceStore(this.books).selected(request.bookId, request.voiceIds) : undefined
       const facts = request.useFacts ? await (await FactStore.at(this.files.root, this.workspaceId, this.books)).context(request.bookId, request.chapterId, request.knowledgeScope ?? 'reader', 128 * 1024) : undefined
       if (facts && facts.state !== 'complete') throw new BookError(facts.state === 'over-budget' ? 'context-too-large' : 'facts-incomplete')
       if ((await this.books.readBook(request.bookId)).revision !== request.expectedRevision) throw new BookError('revision-conflict')
@@ -87,6 +90,7 @@ export class ProposalStore {
         candidateHash: '', elapsedMs: 0, usage: { state: 'unknown' },
         ...(chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind ? { documentKind: chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind } : {}),
         ...(request.materialIds ? { context } : {}),
+        ...(voices ? { voiceContext: voices.map(voice => ({ ...voice, schemaVersion: 1 as const, state: 'active' as const })) } : {}),
         ...(facts ? { factContext: { content: json({ facts: facts.facts, summaries: facts.summaries }), scope: request.knowledgeScope ?? 'reader', sources: [...facts.sources] } } : {}),
         ...(round ? { revisionRound: round } : {}), ...(request.parentProposalId ? { parentCandidateHash: hash(baseline) } : {}) }
       proposal.candidateHash = hash(candidate(proposal))
@@ -135,6 +139,10 @@ export class ProposalStore {
     for (const item of proposal.factContext?.sources ?? []) {
       const source = await this.books.readChapter(bookId, item.chapterId), record = await this.books.readChapter(bookId, item.recordId)
       if (source.hash !== item.hash || source.book.chapters.find(chapter => chapter.chapterId === item.chapterId)?.revision !== item.revision || record.hash !== item.recordHash || source.externallyModified || record.externallyModified) return proposalView(proposal, 'expired', 'revision-conflict', false)
+    }
+    for (const item of proposal.voiceContext ?? []) {
+      const current = await new VoiceStore(this.books).read(bookId, item.voiceId)
+      if (current.state !== 'active' || current.hash !== item.hash) return proposalView(proposal, 'expired', 'voice-unavailable', false)
     }
     return proposalView(proposal, proposal.state === 'generating' && !active ? 'interrupted' : proposal.state,
       proposal.state === 'generating' && !active ? 'host-restarted' : proposal.reason, false)

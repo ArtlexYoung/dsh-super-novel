@@ -10,6 +10,7 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
   const [instruction, setInstruction] = useState('')
   const [materials, setMaterials] = useState('')
   const [materialIds, setMaterialIds] = useState([])
+  const [voices, setVoices] = useState([]), [voiceIds, setVoiceIds] = useState([])
   const [useFacts, setUseFacts] = useState(false)
   const [knowledgeScope, setKnowledgeScope] = useState('reader')
   const [factState, setFactState] = useState(null)
@@ -22,6 +23,11 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
   const mounted = useRef(true)
   const running = view?.state === 'generating' || items.some(item => item.state === 'generating')
   const target = book.chapters.find(item => item.chapterId === chapterId)
+  useEffect(() => {
+    const controller = new AbortController()
+    api.voiceSamples(sessionId, book.bookId, controller.signal).then(unwrap).then(value => { if (!controller.signal.aborted) setVoices(value) }).catch(error => { if (!controller.signal.aborted) setError(error.reason ?? 'storage-failed') })
+    return () => controller.abort()
+  }, [api, sessionId, book.bookId, book.revision, revisionHint])
   useEffect(() => {
     if (!useFacts) { setFactState(null); return }
     const controller = new AbortController()
@@ -68,7 +74,7 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
     const selected = mode === 'rewrite' || mode === 'polish'
     const request = { bookId: book.bookId, chapterId, expectedRevision: book.revision, expectedHash: entry.diskHash,
       mode, instruction, materials, start: selected ? selection.start : mode === 'continue' ? entry.diskContent.length : 0,
-      end: selected ? selection.end : entry.diskContent.length, ...(materialIds.length ? { materialIds } : {}), ...(useFacts ? { useFacts, knowledgeScope } : {}) }
+      end: selected ? selection.end : entry.diskContent.length, ...(materialIds.length ? { materialIds } : {}), ...(voiceIds.length ? { voiceIds } : {}), ...(useFacts ? { useFacts, knowledgeScope } : {}) }
     const key = JSON.stringify(request)
     if (requestId.current.key !== key) requestId.current = { key, id: crypto.randomUUID() }
     const value = unwrap(await api.generateChapter(sessionId, { ...request, proposalId: requestId.current.id }, signal))
@@ -94,7 +100,8 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
       {needsSelection && <p role="status">{t('selectedRange')} {selection.end - selection.start}</p>}
       <label className="sn-field">{t('instruction')}<textarea className="sn-instruction" aria-label={t('instruction')} value={instruction} maxLength={16384} disabled={busy} onChange={event => setInstruction(event.target.value)} /></label>
       <details><summary>{t('materials')}</summary><textarea className="sn-materials" aria-label={t('materials')} value={materials} maxLength={65536} disabled={busy} onChange={event => setMaterials(event.target.value)} /></details>
-      <details><summary>{t('selectMaterials')}</summary><div className="sn-material-list">{book.chapters.filter(item => item.kind && item.kind !== 'chapter' && item.kind !== 'facts' && item.chapterId !== chapterId).map(item => <label key={item.chapterId}><input type="checkbox" checked={materialIds.includes(item.chapterId)} disabled={busy} onChange={event => setMaterialIds(previous => event.target.checked ? [...previous, item.chapterId] : previous.filter(id => id !== item.chapterId))} /><span>{item.title} · {t(item.kind)}</span></label>)}</div></details>
+      <details><summary>{t('selectMaterials')}</summary><div className="sn-material-list">{book.chapters.filter(item => item.kind && item.kind !== 'chapter' && item.kind !== 'facts' && item.kind !== 'voice' && item.chapterId !== chapterId).map(item => <label key={item.chapterId}><input type="checkbox" checked={materialIds.includes(item.chapterId)} disabled={busy} onChange={event => setMaterialIds(previous => event.target.checked ? [...previous, item.chapterId] : previous.filter(id => id !== item.chapterId))} /><span>{item.title} · {t(item.kind)}</span></label>)}</div></details>
+      <details><summary>{t('selectVoices')}</summary><div className="sn-material-list">{voices.map(item => <label key={item.voiceId}><input type="checkbox" checked={voiceIds.includes(item.voiceId)} disabled={busy || item.state !== 'active'} onChange={event => setVoiceIds(previous => event.target.checked ? [...previous, item.voiceId] : previous.filter(id => id !== item.voiceId))} /><span>{item.sourceDescription} · {t(item.channel)} · {t(`voice-${item.state}`)}</span></label>)}</div></details>
       {(!target?.kind || target.kind === 'chapter') && <div className="sn-fact-settings"><label><input type="checkbox" checked={useFacts} onChange={event => setUseFacts(event.target.checked)} />{t('useFacts')}</label>{useFacts && <><label className="sn-field">{t('knowledgeScope')}<select aria-label={t('contextScope')} value={knowledgeScope} onChange={event => setKnowledgeScope(event.target.value)}><option value="reader">{t('reader')}</option>{book.chapters.filter(item => item.kind === 'character').map(item => <option key={item.chapterId} value={item.chapterId}>{item.title}</option>)}</select></label><p role="status">{t(`context-${factState?.state ?? 'loading'}`)}{factState ? ` · ${factState.bytes} B` : ''}</p></>}</div>}
       <div className="sn-row"><button disabled={!canGenerate} onClick={generate}>{t('generate')}</button>{dirty && <span className="sn-notice">{t('saveFirst')}</span>}</div>
     </div>

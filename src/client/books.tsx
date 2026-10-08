@@ -5,6 +5,8 @@ import { ChapterRecovery, InterruptedRecovery } from './history.js'
 import { materialKinds, materialTemplate } from './materials.js'
 import { Facts } from './facts.js'
 import { Reviews } from './reviews.js'
+import { Voices } from './voices.js'
+import { Transfer } from './transfer.js'
 
 export function unwrap(result) {
   if (!result.ok) {
@@ -46,6 +48,8 @@ export function Books({ api, sessionId, t }) {
   const [documents, setDocuments] = useState('chapters')
   const [kind, setKind] = useState('seed')
   const [linkedChapterId, setLinkedChapterId] = useState('')
+  const [workTab, setWorkTab] = useState(() => { try { const tab = localStorage.getItem('super-novel.workTab'); return ['writing', 'references', 'assessment', 'revisions'].includes(tab) ? tab : 'writing' } catch { return 'writing' } }), [search, setSearch] = useState(''), [directoryPage, setDirectoryPage] = useState(0)
+  useEffect(() => { try { localStorage.setItem('super-novel.workTab', workTab) } catch {} }, [workTab])
   const pending = useRef(null)
   const mounted = useRef(true)
   const requestIds = useRef(new Map())
@@ -55,7 +59,9 @@ export function Books({ api, sessionId, t }) {
   const book = library?.books.find(item => item.bookId === bookId)
   const writable = library?.writable && !busy && !book?.recoveryRequired
   const currentChapter = book?.chapters.find(item => item.chapterId === chapterId)
-  const visible = book?.chapters.filter(item => documents === 'chapters' ? !item.kind || item.kind === 'chapter' : item.kind && item.kind !== 'chapter' && item.kind !== 'facts') ?? []
+  const visible = book?.chapters.filter(item => documents === 'chapters' ? !item.kind || item.kind === 'chapter' : item.kind && item.kind !== 'chapter' && item.kind !== 'facts' && item.kind !== 'voice') ?? []
+  const filtered = visible.filter(item => item.title.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
+  useEffect(() => setDirectoryPage(0), [search, bookId, documents])
   const dirty = entry && (entry.content !== entry.diskContent || entry.externallyModified)
   const stale = entry && (entry.bookRevision !== book?.revision || entry.baseHash !== entry.diskHash)
   const entryKey = entry && draftKey(library.workspaceId, bookId, chapterId)
@@ -190,14 +196,17 @@ export function Books({ api, sessionId, t }) {
         <input aria-label={t('bookTitle')} placeholder={t('bookTitle')} maxLength={200} value={bookTitle} disabled={busy || !library.writable} onChange={event => setBookTitle(event.target.value)} />
         <IconButton label={t('createBook')} icon={IconPlusOutline16} type="submit" disabled={busy || !library.writable || !bookTitle.trim()} />
       </form>
+      <Transfer api={api} sessionId={sessionId} book={book} writable={library.writable && !busy} t={t} imported={value => { applyBook(value); setChapterId(value.chapters[0]?.chapterId ?? ''); setDocuments('chapters'); setWorkTab('writing') }} />
       {book?.recoveryRequired && <button disabled={busy || !library.writable} onClick={() => action(async signal => applyBook(unwrap(await api.recoverBook(sessionId, bookId, signal))))}>{t('recover')}</button>}
       {book?.recoveryRequired && <InterruptedRecovery key={bookId} api={api} sessionId={sessionId} bookId={bookId} writable={library.writable && !busy} t={t} saved={applyBook} />}
       {book && !book.recoveryRequired && <>
         <div className="sn-modes" role="tablist" aria-label={t('documentView')}>{['chapters', 'materialsView'].map((value, index) => <button role="tab" key={value} aria-selected={documents === (index ? 'materials' : 'chapters')} onClick={() => { setDocuments(index ? 'materials' : 'chapters'); setChapterId('') }}>{t(value)}</button>)}</div>
+        <input type="search" aria-label={t('searchDocuments')} value={search} onChange={event => setSearch(event.target.value)} />
         <nav className="sn-chapters" aria-label={t('chapter')}>
           {!visible.length && <p>{t(documents === 'chapters' ? 'noChapters' : 'noMaterials')}</p>}
-          {visible.map((item, index) => <button key={item.chapterId} disabled={busy} aria-current={chapterId === item.chapterId ? 'true' : undefined} onClick={() => { setChapterId(item.chapterId); setError('') }}><span className="sn-number">{index + 1}</span><span>{item.title}{item.kind && item.kind !== 'chapter' ? ` · ${t(item.kind)}` : ''}</span></button>)}
+          {filtered.slice(directoryPage * 100, directoryPage * 100 + 100).map((item, index) => <button key={item.chapterId} disabled={busy} aria-current={chapterId === item.chapterId ? 'true' : undefined} onClick={() => { setChapterId(item.chapterId); setError(''); setWorkTab('writing') }}><span className="sn-number">{directoryPage * 100 + index + 1}</span><span>{item.title}{item.kind && item.kind !== 'chapter' ? ` · ${t(item.kind)}` : ''}</span></button>)}
         </nav>
+        {filtered.length > 100 && <div className="sn-row"><button aria-label={t('previousPage')} disabled={!directoryPage} onClick={() => setDirectoryPage(value => value - 1)}>&lt;</button><span>{directoryPage + 1} / {Math.ceil(filtered.length / 100)}</span><button aria-label={t('nextPage')} disabled={(directoryPage + 1) * 100 >= filtered.length} onClick={() => setDirectoryPage(value => value + 1)}>&gt;</button></div>}
         {documents === 'materials' && <><label className="sn-field">{t('materialType')}<select aria-label={t('materialType')} value={kind} onChange={event => { setKind(event.target.value); setLinkedChapterId('') }}>{materialKinds.map(value => <option key={value} value={value}>{t(value)}</option>)}</select></label>
           {(kind === 'chapter-outline' || kind === 'scene') && <label className="sn-field">{t('relatedChapter')}<select aria-label={t('relatedChapter')} value={linkedChapterId} onChange={event => setLinkedChapterId(event.target.value)}><option value="">{t('none')}</option>{book.chapters.filter(item => !item.kind || item.kind === 'chapter').map(item => <option key={item.chapterId} value={item.chapterId}>{item.title}</option>)}</select></label>}
         </>}
@@ -207,6 +216,13 @@ export function Books({ api, sessionId, t }) {
           <IconButton label={t(documents === 'chapters' ? 'createChapter' : 'createMaterial')} icon={IconPlusOutline16} type="submit" disabled={!writable || !chapterTitle.trim()} />
         </form>
         {currentChapter && <>
+          <div className="sn-work-tabs" role="tablist" aria-label={t('workspaceViews')} onKeyDown={event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+            const buttons = Array.from(event.currentTarget.querySelectorAll('button')), at = buttons.indexOf(document.activeElement)
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (at + (event.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length
+            event.preventDefault(); buttons[next].focus(); buttons[next].click()
+          }}>{['writing', 'references', 'assessment', 'revisions'].map(tab => <button role="tab" key={tab} id={`sn-tab-${tab}`} aria-controls={`sn-panel-${tab}`} aria-selected={workTab === tab} tabIndex={workTab === tab ? 0 : -1} onClick={() => setWorkTab(tab)}>{t(`tab-${tab}`)}</button>)}</div>
+          <div id="sn-panel-writing" aria-labelledby="sn-tab-writing" hidden={workTab !== 'writing'} role="tabpanel">
           <div className="sn-row">
             <input aria-label={t('rename')} value={renameTitle} maxLength={200} disabled={!writable} onChange={event => setRenameTitle(event.target.value)} />
             <IconButton label={t('rename')} icon={IconEditOutline16} disabled={!writable || !renameTitle.trim() || renameTitle === currentChapter.title} onClick={() => change('rename', { title: renameTitle })} />
@@ -226,9 +242,16 @@ export function Books({ api, sessionId, t }) {
             try { localStorage.removeItem(entryKey) } catch { setError('draftFailed'); return }
             setRefresh(value => value + 1)
           }} />}
+          </div>
+          <div id="sn-panel-revisions" aria-labelledby="sn-tab-revisions" hidden={workTab !== 'revisions'} role="tabpanel">
           {entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} />}
-          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Facts key={`facts:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} locate={(start, end) => { setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
-          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Reviews key={`reviews:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} t={t} revisionHint={refresh} revised={() => setRefresh(value => value + 1)} locate={(start, end) => { setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
+          </div>
+          <div id="sn-panel-references" aria-labelledby="sn-tab-references" hidden={workTab !== 'references'} role="tabpanel">
+          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <><Facts key={`facts:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} /><Voices key={`voices:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} changed={applyBook} /></>}
+          </div>
+          <div id="sn-panel-assessment" aria-labelledby="sn-tab-assessment" hidden={workTab !== 'assessment'} role="tabpanel">
+          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Reviews key={`reviews:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} t={t} revisionHint={refresh} revised={() => { setRefresh(value => value + 1); setWorkTab('revisions') }} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
+          </div>
         </>}
       </>}
     </>}

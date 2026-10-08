@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { BookError, contentSchema, documentKindSchema, hash, idSchema, json, titleSchema } from './books.js'
 import type { ChapterMutationRequest, GenerationUsage, GenerateChapterRequest, ProposalView } from '../types.js'
+import { voiceDocumentSchema } from './voice.js'
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 export const generationRequestSchema = z.strictObject({
@@ -11,6 +12,7 @@ export const generationRequestSchema = z.strictObject({
   materials: contentSchema.pipe(z.string().max(65_536)),
   start: z.int().nonnegative(), end: z.int().nonnegative(),
   materialIds: z.array(idSchema).max(100).refine(ids => new Set(ids).size === ids.length).optional(),
+  voiceIds: z.array(idSchema).max(20).refine(ids => new Set(ids).size === ids.length).optional(),
   useFacts: z.boolean().optional(), knowledgeScope: z.union([idSchema, z.literal('reader')]).optional(),
   parentProposalId: idSchema.optional(), reviewId: idSchema.optional(), issueId: idSchema.optional(),
 })
@@ -33,6 +35,7 @@ export const proposalSchema = z.strictObject({
   factContext: z.strictObject({ content: contentSchema, scope: z.union([idSchema, z.literal('reader')]),
     sources: z.array(z.strictObject({ chapterId: idSchema, revision: z.int().positive(), hash: digest, recordId: idSchema, recordHash: digest })).max(10_000) }).optional(),
   parentCandidateHash: digest.optional(), revisionRound: z.int().min(1).max(2).optional(),
+  voiceContext: z.array(voiceDocumentSchema.safeExtend({ state: z.literal('active'), hash: digest })).max(20).optional(),
 })
 export type Proposal = z.infer<typeof proposalSchema>
 
@@ -61,6 +64,10 @@ export function parseProposal(text: string, workspaceId: string, bookId: string,
   const selected = proposal.request.materialIds ?? []
   const context = proposal.context ?? []
   if (context.length !== selected.length || context.some((item, index) => item.chapterId !== selected[index] || item.hash !== hash(item.content))) throw new BookError('invalid-format')
+  if ((proposal.voiceContext ?? []).length !== (proposal.request.voiceIds ?? []).length || proposal.voiceContext?.some((item, index) => {
+    const { state: _state, hash: digest, ...document } = item
+    return item.voiceId !== proposal.request.voiceIds![index] || !item.authorized || digest !== hash(json(document))
+  })) throw new BookError('invalid-format')
   validateRange(proposal.request, proposal.baseline)
   return proposal
 }
@@ -88,5 +95,6 @@ export function generationPrompt(proposal: Proposal): string {
     ...(proposal.documentKind && proposal.documentKind !== 'chapter' ? { documentKind: proposal.documentKind, planningTask: 'Write only the requested planning document. Planned events are not established story facts.' } : {}),
     ...(proposal.context?.length ? { selectedMaterials: proposal.context, planningBoundary: 'Plans describe possible future events, not events that have already happened.' } : {}),
     ...(proposal.factContext ? { establishedFacts: proposal.factContext.content, knowledgeScope: proposal.factContext.scope } : {}),
+    ...(proposal.voiceContext?.length ? { authorVoices: proposal.voiceContext, voiceBoundary: 'Authorized samples are stylistic references, not story facts. Preserve deliberate repetition, colloquial dialogue and rough expression when appropriate. Keep narration and named-character dialogue separate.' } : {}),
     selection: { start: proposal.request.start, end: proposal.request.end, text: proposal.baseline.slice(proposal.request.start, proposal.request.end) } })
 }

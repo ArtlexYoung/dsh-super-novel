@@ -1,6 +1,6 @@
 # 当前架构
 
-当前 `0.0.8` 提供写作预设、作品存储、正文与规划资料、生成候选、事实/摘要候选、独立审校、有限修订、作者采纳、历史和冲突恢复。
+当前 `0.0.9` 提供写作预设、作品存储、正文与规划资料、生成候选、事实/摘要候选、文风授权、导入导出、独立审校、有限修订、作者采纳、历史和冲突恢复。
 
 ## 模块
 
@@ -22,6 +22,8 @@
 | `src/host/proposal-tasks.ts` | 生成进度、取消、超时和卸载 |
 | `src/host/chapter-generator.ts` | 读取有效会话模型，执行无工具的单次宿主调用 |
 | `src/client/proposals.tsx` | 生成、候选记录、改动对照和采纳操作 |
+| `src/host/voice-store.ts` | 文风样本来源、授权、撤销和过期 |
+| `src/host/book-transfer.ts` | 导入预览、逐章恢复和正文/资料导出 |
 | `src/client/books.tsx` | 作品选择、章节目录、正文编辑/预览和本地草稿 |
 | `src/client/index.tsx` | 中英文侧栏注册与预设启用 |
 | `presets/dsh-super-novel/` | 提供预设名称和 Agent 插件组合 |

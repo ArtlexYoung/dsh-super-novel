@@ -1,4 +1,7 @@
 export const zh = {
+  voices: '作者声音', voice: '文风授权', voiceChannel: '使用范围', narration: '叙述', dialogue: '人物对白', voiceCharacter: '对白人物', sampleSource: '样本来源说明', sampleAuthorized: '我有权授权选中样本用于本作品写作', authorizeSelection: '授权选中样本', revokeVoice: '撤销授权', selectVoices: '选用已授权声音', 'voice-active': '有效', 'voice-revoked': '已撤销', 'voice-expired': '来源已变化', 'voice-unavailable': '文风授权已撤销或来源过期。',
+  importExport: '导入与导出', importFile: 'Markdown / TXT 文件', importTitle: '导入作品名', chapterBoundaries: '章节边界', 'import-single': '单章', 'import-headings': '一级标题分章', 'import-archive': '插件导出格式', previewImport: '预览导入', confirmImport: '导入为新作品', exportScope: '导出范围', exportFormat: '文件格式', export: '导出', notAnalyzed: '事实尚未分析', 'invalid-import': '导入格式或章节边界无效。',
+  searchDocuments: '搜索章节或资料', previousPage: '上一页', nextPage: '下一页', workspaceViews: '工作台视图', 'tab-writing': '章节', 'tab-references': '资料', 'tab-assessment': '审校', 'tab-revisions': '修订',
   title: '小说工作台', intro: '作品与章节',
   reviews: '审校与修订', reviewEvidence: '审校候选原文', reviewTarget: '审校对象', savedChapter: '已保存正文', mechanicalLimits: '字数与段数', minCharacters: '最少字数', maxCharacters: '最多字数（0 不限）', minParagraphs: '最少段数', maxParagraphs: '最多段数（0 不限）',
   runReview: '开始审校', reviewRecords: '审校记录', characters: '字', paragraphs: '段', 'review-passed': '已检查，未发现问题', 'review-issues': '发现问题', 'review-unknown': '检查未完成', 'review-degraded': '依据不完整', 'review-expired': '审校已过期',
@@ -66,6 +69,9 @@ export const zh = {
 }
 
 export const en = {
+  voices: 'Author voices', voice: 'Voice authorization', voiceChannel: 'Voice scope', narration: 'Narration', dialogue: 'Character dialogue', voiceCharacter: 'Dialogue character', sampleSource: 'Sample source', sampleAuthorized: 'I can authorize this selection for writing this book', authorizeSelection: 'Authorize selection', revokeVoice: 'Revoke authorization', selectVoices: 'Select authorized voices', 'voice-active': 'Active', 'voice-revoked': 'Revoked', 'voice-expired': 'Source changed', 'voice-unavailable': 'Voice authorization was revoked or its source changed.',
+  importExport: 'Import and export', importFile: 'Markdown / TXT file', importTitle: 'Imported book title', chapterBoundaries: 'Chapter boundaries', 'import-single': 'Single chapter', 'import-headings': 'Level-one headings', 'import-archive': 'Plugin export format', previewImport: 'Preview import', confirmImport: 'Import as new book', exportScope: 'Export scope', exportFormat: 'File format', export: 'Export', notAnalyzed: 'Facts not analyzed', 'invalid-import': 'Invalid import format or chapter boundaries.',
+  searchDocuments: 'Search chapters or materials', previousPage: 'Previous page', nextPage: 'Next page', workspaceViews: 'Workspace views', 'tab-writing': 'Chapters', 'tab-references': 'References', 'tab-assessment': 'Review', 'tab-revisions': 'Revisions',
   title: 'Novel workspace', intro: 'Books and chapters',
   reviews: 'Review and revision', reviewEvidence: 'Reviewed candidate text', reviewTarget: 'Review target', savedChapter: 'Saved chapter', mechanicalLimits: 'Character and paragraph limits', minCharacters: 'Minimum characters', maxCharacters: 'Maximum characters (0 unlimited)', minParagraphs: 'Minimum paragraphs', maxParagraphs: 'Maximum paragraphs (0 unlimited)',
   runReview: 'Run review', reviewRecords: 'Review records', characters: 'characters', paragraphs: 'paragraphs', 'review-passed': 'Checked, no issues found', 'review-issues': 'Issues found', 'review-unknown': 'Review incomplete', 'review-degraded': 'Incomplete evidence', 'review-expired': 'Review expired',

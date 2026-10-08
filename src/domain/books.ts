@@ -6,7 +6,7 @@ export const idSchema = z.uuid()
 export const titleSchema = z.string().trim().min(1).max(200).refine(value => !value.includes('\0') && Buffer.from(value, 'utf8').toString('utf8') === value)
 export const contentSchema = z.string().refine(value => !value.includes('\0') && Buffer.from(value, 'utf8').toString('utf8') === value && Buffer.byteLength(value, 'utf8') <= 4 * 1024 * 1024, 'Invalid or oversized text')
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
-export const documentKindSchema = z.enum(['chapter', 'seed', 'book-card', 'character', 'world', 'outline', 'chapter-outline', 'scene', 'facts'])
+export const documentKindSchema = z.enum(['chapter', 'seed', 'book-card', 'character', 'world', 'outline', 'chapter-outline', 'scene', 'facts', 'voice'])
 export const chapterSchema = z.strictObject({ chapterId: idSchema, title: titleSchema, revision: z.int().positive(), hash: digest,
   kind: documentKindSchema.optional(), linkedChapterId: idSchema.optional() })
 export const bookSchema = z.strictObject({

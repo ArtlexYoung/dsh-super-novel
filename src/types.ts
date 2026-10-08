@@ -12,7 +12,7 @@ export interface ChapterSummary {
   readonly kind?: DocumentKind
   readonly linkedChapterId?: string
 }
-export type DocumentKind = 'chapter' | 'seed' | 'book-card' | 'character' | 'world' | 'outline' | 'chapter-outline' | 'scene' | 'facts'
+export type DocumentKind = 'chapter' | 'seed' | 'book-card' | 'character' | 'world' | 'outline' | 'chapter-outline' | 'scene' | 'facts' | 'voice'
 export interface BookSnapshot {
   readonly schemaVersion: 1
   readonly bookId: string
@@ -63,6 +63,7 @@ export interface GenerateChapterRequest {
   readonly start: number
   readonly end: number
   readonly materialIds?: readonly string[]
+  readonly voiceIds?: readonly string[]
   readonly useFacts?: boolean
   readonly knowledgeScope?: string
   readonly parentProposalId?: string
@@ -77,6 +78,20 @@ export interface MaterialSnapshot {
   readonly hash: string
   readonly content: string
 }
+export interface AuthorizeVoiceRequest {
+  readonly operationId: string; readonly bookId: string; readonly expectedRevision: number
+  readonly sourceChapterId: string; readonly expectedHash: string; readonly start: number; readonly end: number
+  readonly channel: 'narration' | 'dialogue'; readonly characterId: string; readonly sourceDescription: string; readonly authorized: boolean
+}
+export interface VoiceSample {
+  readonly voiceId: string; readonly sourceChapterId: string; readonly sourceRevision: number; readonly sourceHash: string
+  readonly channel: 'narration' | 'dialogue'; readonly characterId: string; readonly sourceDescription: string
+  readonly sample: string; readonly start: number; readonly end: number; readonly authorized: boolean; readonly authorizedAt: number
+  readonly state: 'active' | 'revoked' | 'expired'; readonly hash: string
+}
+export interface ImportRequest { readonly operationId: string; readonly title: string; readonly text: string; readonly mode: 'single' | 'headings' | 'archive' }
+export interface ImportPreview { readonly title: string; readonly chapters: readonly { readonly title: string; readonly characters: number; readonly kind: DocumentKind }[]; readonly bytes: number; readonly analysis: 'not-analyzed' }
+export interface ExportText { readonly text: string; readonly title: string }
 export type KnowledgeScope = { readonly kind: 'reader' } | { readonly kind: 'character'; readonly characterId: string }
 export interface EvidenceFact {
   readonly factId: string

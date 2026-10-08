@@ -62,6 +62,8 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 ## 打包与发布
 
+0.0.9 工作台用 `scripts/browser-voices.ts` 验证导入预览、授权样本、撤销后候选过期和导出边界。真实作者声音质量、跨平台文件选择器和大规模目录性能仍未验证。
+
 安装包包含编译产物、预设、bundle patch、README、文档和许可证。使用者安装 tarball 不需要生成器或相邻源码仓库。
 
 `PLAN.md`、`MEMORY.md`、`TASKS.md`、`.development/` 是本地过程资料；不跟踪、不打包。`eval/`、`.test-output/` 和 `.build/` 保存本地评测、截图和构建暂存，也不发布。
