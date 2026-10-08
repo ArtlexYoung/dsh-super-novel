@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { IconPlusOutline16, IconEditOutline16, IconRefreshOutline16, IconCheckOutline16, IconChevronUpOutline14, IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Proposals } from './proposals.js'
 
 export function unwrap(result) {
   if (!result.ok) {
@@ -37,6 +38,7 @@ export function Books({ api, sessionId, t }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const [selection, setSelection] = useState({ start: 0, end: 0 })
   const pending = useRef(null)
   const mounted = useRef(true)
   const requestIds = useRef(new Map())
@@ -71,6 +73,7 @@ export function Books({ api, sessionId, t }) {
     const controller = new AbortController()
     const generation = ++sequence.current
     setEntry(null)
+    setSelection({ start: 0, end: 0 })
     if (!book) return () => controller.abort()
     try { localStorage.setItem(`super-novel.selection:${library.workspaceId}`, JSON.stringify({ bookId, chapterId })) } catch {}
     if (book.recoveryRequired) return () => controller.abort()
@@ -198,8 +201,9 @@ export function Books({ api, sessionId, t }) {
           </div>
           {stale && <p role="alert">{t('stale')}</p>}
           {notice && <p className="sn-notice" role="status">{t(notice)}</p>}
-          {entry && (editing ? <textarea aria-label={t('body')} spellCheck={false} value={entry.content} readOnly={!writable} onChange={event => storeDraft({ ...entry, content: event.target.value, operationId: crypto.randomUUID() })} /> : <pre className="sn-preview" aria-label={t('body')}>{entry.content}</pre>)}
+          {entry && (editing ? <textarea aria-label={t('body')} spellCheck={false} value={entry.content} readOnly={!writable} onSelect={event => setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd })} onChange={event => storeDraft({ ...entry, content: event.target.value, operationId: crypto.randomUUID() })} /> : <pre className="sn-preview" aria-label={t('body')}>{entry.content}</pre>)}
           <div className="sn-row sn-recovery-actions"><button disabled={!entry || busy} onClick={readDisk}>{t('reloadDisk')}</button><button disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</button></div>
+          {entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} adopted={() => setRefresh(value => value + 1)} />}
         </>}
       </>}
     </>}

@@ -61,7 +61,7 @@ test('real Loader discovers host RPC and mounts the writing persona only in its 
   assert.equal(ctx.agentPresets.defaultId, 'standard')
   assert(ctx.typert.local.get('superNovel/status'))
   assert(ctx.typert.local.get('superNovel/enable'))
-  for (const name of ['library', 'createBook', 'chapter', 'changeChapter', 'recoverBook']) assert(ctx.typert.local.get(`superNovel/${name}`))
+  for (const name of ['library', 'createBook', 'chapter', 'changeChapter', 'recoverBook', 'generateChapter', 'proposals', 'proposal', 'stopProposal', 'acceptProposal', 'rejectProposal']) assert(ctx.typert.local.get(`superNovel/${name}`))
   const handle = await ctx.agents.create({ sessionId: SessionId('write-p0'), setup: async agentCtx => { await ctx.agentPresets.mount(agentCtx, 'dsh-super-novel') } })
   t.after(() => handle.dispose())
   const writing = await ctx.systemPrompt.assemble(assembleContextFor(handle.agent))

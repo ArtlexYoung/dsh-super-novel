@@ -149,6 +149,15 @@ export class BookStore {
     return snapshot(previous.after)
   }
 
+  /** Pure receipt lookup used to reconcile a proposal after an interrupted adoption. */
+  async receipt(bookId: string, operationId: string): Promise<Transaction[]> {
+    const file = await this.files.read(this.transactionPath(bookId, operationId), 32 * 1024 * 1024)
+    if (!file.exists) return []
+    const receipt = this.parseTransaction(file.text, bookId)
+    if (receipt.operationId !== operationId || receipt.state !== 'completed') throw new BookError('invalid-format')
+    return [receipt]
+  }
+
   async mutate(input: ChapterMutationRequest, signal: AbortSignal): Promise<BookSnapshot> {
     const request = mutationSchema.parse(input)
     return await this.files.lock(join(this.folder(request.bookId), '.write.lock'), async () => {

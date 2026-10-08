@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
-export const inject = ['workspaceController', 'sessionController', 'sessions', 'agentPresets', 'superNovel']
-export async function apply(ctx) {
+export const inject = ['workspaceController', 'sessionController', 'sessions', 'agentPresets', 'superNovel', 'llm']
+export async function apply(ctx, config = {}) {
   const roster = await ctx.agentPresets.list()
   assert.equal(ctx.agentPresets.defaultId, 'standard')
   assert(!roster.some(row => row.broken))
@@ -24,5 +24,9 @@ export async function apply(ctx) {
       session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     }
     await ctx.sessionController.rename({ sessionId, title: sessionId })
+  }
+  if (config.generationFixture === true) {
+    const { apply } = await import('./preview-generation.ts')
+    await apply(ctx)
   }
 }

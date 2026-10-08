@@ -2,6 +2,7 @@ import { basename } from 'node:path'
 import { realpath } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
@@ -17,8 +18,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 export interface WorkspaceBooks {
   readonly store: BookStore
   readonly workspace: string
+  readonly root: string
   readonly workspaceId: string
   readonly writable: boolean
+  readonly session: Session
 }
 
 export async function workspaceBooks(ctx: Context, sessionId: string, writing: boolean, signal: AbortSignal): Promise<WorkspaceBooks> {
@@ -48,7 +51,7 @@ export async function workspaceBooks(ctx: Context, sessionId: string, writing: b
   const mode = policy.resolve({ session }).mode
   const writable = mode !== 'read-only'
   if (writing && !writable) throw new BookError('read-only')
-  return { store: await BookStore.at(root), workspace: basename(root), workspaceId: hash(root), writable }
+  return { store: await BookStore.at(root), root, workspace: basename(root), workspaceId: hash(root), writable, session }
 }
 
 export async function storageResult<T>(action: () => Promise<T>): Promise<T> {

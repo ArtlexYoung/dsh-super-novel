@@ -43,3 +43,58 @@ export interface ChapterMutationRequest {
   readonly content: string
   readonly expectedHash: string
 }
+
+export type ProposalMode = 'draft' | 'continue' | 'rewrite' | 'polish'
+export type ProposalState = 'generating' | 'review' | 'accepted' | 'rejected' | 'expired' | 'interrupted'
+export interface GenerateChapterRequest {
+  readonly proposalId: string
+  readonly bookId: string
+  readonly chapterId: string
+  readonly expectedRevision: number
+  readonly expectedHash: string
+  readonly mode: ProposalMode
+  readonly instruction: string
+  readonly materials: string
+  readonly start: number
+  readonly end: number
+}
+export interface ProposalSummary {
+  readonly proposalId: string
+  readonly bookId: string
+  readonly chapterId: string
+  readonly mode: ProposalMode
+  readonly state: ProposalState
+  readonly reason: string
+  readonly createdAt: number
+  readonly updatedAt: number
+  readonly generatedCharacters: number
+  readonly recoveryRequired: boolean
+}
+export type GenerationUsage = { readonly state: 'unknown' } | {
+  readonly state: 'reported'
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadTokens?: number
+  readonly cacheWriteTokens?: number
+  readonly totalTokens?: number
+  readonly reasoningTokens?: number
+}
+export interface ProposalView extends ProposalSummary {
+  readonly baselineRevision: number
+  readonly baselineHash: string
+  readonly baseline: string
+  readonly start: number
+  readonly end: number
+  readonly replacement: string
+  readonly candidate: string
+  readonly candidateHash: string
+  readonly instruction: string
+  readonly materials: string
+  readonly elapsedMs: number
+  readonly usage: GenerationUsage
+}
+export interface ProposalDecisionRequest {
+  readonly bookId: string
+  readonly proposalId: string
+  readonly expectedCandidateHash: string
+}

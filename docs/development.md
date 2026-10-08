@@ -30,7 +30,7 @@ npm run pack:check
 | --- | --- |
 | `npm run typecheck` | 检查 Host TypeScript 类型 |
 | `npm run build` | 编译 Host、浏览器代码及官方 Typert/Remote 产物 |
-| `npm test` | 检查作品读写/恢复、权限、预设安装、组合加载、RPC 和用量统计 |
+| `npm test` | 检查作品保存/恢复、候选采纳/取消/冲突、模型路由、权限、预设与组合加载 |
 | `npm run pack:check` | 构建并查看 npm 文件清单 |
 | `npm pack` | 构建并生成可安装 tarball |
 
@@ -43,7 +43,14 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 准备脚本拒绝覆盖已有目录。使用已安装的 Playwright 路径运行 `scripts/browser-books.ts`，先验证创建和保存，再重启预览服务，以 `reopen` 参数验证磁盘恢复。运行方法与临时认证 URL 的处理见 [P0 技术验证](P0-VALIDATION.md#重现浏览器验证)；现用 URL 位于隔离预览目录。只终止本次启动的进程。
 
-`0.0.3` 的浏览器检查不调用模型。真实模型测试会产生调用费用，方法和历史结果见[评测说明](evaluation.md)。单元测试通过不代表跨平台兼容或文学质量通过。
+固定响应候选界面的隔离验证：
+
+```sh
+node --experimental-strip-types scripts/prepare-preview.ts .test-output/preview-v004 --generation
+node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v004
+```
+
+使用已安装的 Playwright 路径运行 `scripts/browser-proposals.ts`，重启后用 `reopen` 参数复验。`--generation` 仅为隔离 profile 注册固定响应适配器，不联系 provider；同一 profile 的浏览器检查要串行。真实模型测试会产生调用费用，方法和历史结果见[评测说明](evaluation.md)。固定响应不能证明文学质量或跨平台兼容。
 
 ## 打包与发布
 

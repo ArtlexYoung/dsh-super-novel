@@ -8,9 +8,14 @@ import { PresetInstaller } from './host/preset-install.js'
 import type { PresetStatus } from './types.js'
 import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, LibrarySnapshot } from './types.js'
 import { storageResult, workspaceBooks } from './host/workspace-books.js'
+import type { GenerateChapterRequest, ProposalDecisionRequest, ProposalSummary, ProposalView } from './types.js'
+import { ProposalStore } from './host/proposal-store.js'
+import { ProposalTasks } from './host/proposal-tasks.js'
+import { hostChapterGenerator } from './host/chapter-generator.js'
 
 export type { PresetStatus } from './types.js'
 export type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, LibrarySnapshot } from './types.js'
+export type { GenerateChapterRequest, ProposalDecisionRequest, ProposalSummary, ProposalView } from './types.js'
 
 declare module '@deepseek-ai/cordis' {
   interface Context { superNovel: SuperNovel }
@@ -20,10 +25,12 @@ declare module '@deepseek-ai/cordis' {
 export class SuperNovel extends TypertRemoteService {
   static inject = ['agentPresets']
   private readonly installer: PresetInstaller
+  private readonly tasks = new ProposalTasks()
 
   constructor(ctx: Context) {
     super(ctx, 'superNovel', { namespace: 'superNovel' })
     this.installer = new PresetInstaller(ctx.agentPresets, fileURLToPath(new URL('../presets/dsh-super-novel/', import.meta.url)), JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version)
+    ctx.effect(() => () => this.tasks.dispose())
   }
 
   /**
@@ -77,6 +84,63 @@ export class SuperNovel extends TypertRemoteService {
   @Remote
   async recoverBook(sessionId: string, bookId: string, signal: AbortSignal): Promise<BookSnapshot> {
     return await storageResult(async () => (await workspaceBooks(this.ctx, sessionId, true, signal)).store.recover(bookId, signal))
+  }
+
+  /** Explicit generation creates a separate durable candidate using the Session's model. */
+  @Remote
+  async generateChapter(sessionId: string, request: GenerateChapterRequest, signal: AbortSignal): Promise<ProposalView> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      const store = await ProposalStore.at(scope.root, scope.workspaceId, scope.store)
+      return await this.tasks.start(store, sessionId, request, hostChapterGenerator(this.ctx, scope.session), signal)
+    })
+  }
+
+  /** Pure query; reopening a candidate never dispatches another model call. */
+  @Remote
+  async proposals(sessionId: string, bookId: string, chapterId: string, signal: AbortSignal): Promise<ProposalSummary[]> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      const store = await ProposalStore.at(scope.root, scope.workspaceId, scope.store)
+      return await store.list(bookId, chapterId, id => this.tasks.active(store, bookId, id))
+    })
+  }
+
+  /** Read the persisted baseline, authorized range, candidate and completion state. */
+  @Remote
+  async proposal(sessionId: string, bookId: string, proposalId: string, signal: AbortSignal): Promise<ProposalView> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      const store = await ProposalStore.at(scope.root, scope.workspaceId, scope.store)
+      return await store.view(bookId, proposalId, this.tasks.active(store, bookId, proposalId))
+    })
+  }
+
+  /** Stop explicitly; partial prose is retained but cannot be adopted as complete. */
+  @Remote
+  async stopProposal(sessionId: string, bookId: string, proposalId: string, signal: AbortSignal): Promise<ProposalView> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await this.tasks.stop(await ProposalStore.at(scope.root, scope.workspaceId, scope.store), bookId, proposalId)
+    })
+  }
+
+  /** Adoption rechecks the baseline and reuses the chapter's recoverable save protocol. */
+  @Remote
+  async acceptProposal(sessionId: string, request: ProposalDecisionRequest, signal: AbortSignal): Promise<ProposalView> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await (await ProposalStore.at(scope.root, scope.workspaceId, scope.store)).decide(request, true, signal)
+    })
+  }
+
+  /** Rejecting a candidate never changes the chapter text. */
+  @Remote
+  async rejectProposal(sessionId: string, request: ProposalDecisionRequest, signal: AbortSignal): Promise<ProposalView> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await (await ProposalStore.at(scope.root, scope.workspaceId, scope.store)).decide(request, false, signal)
+    })
   }
 }
 
