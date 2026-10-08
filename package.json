@@ -1,7 +1,7 @@
 {
   "name": "dsh-super-novel",
-  "version": "0.0.2",
-  "description": "Novel-generation preset and sidebar for DeepSeek Harness.",
+  "version": "0.0.3",
+  "description": "Local books, chapters, and a novel-writing preset for DeepSeek Harness.",
   "type": "module",
   "license": "Apache-2.0",
   "main": "lib/index.js",
@@ -68,6 +68,11 @@
     "@deepseek-ai/dsh-client-locale": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-renderer": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-sidebar-right": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-session": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-session-persistence": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-fs": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-sandbox-policy": "0.1.5-rc.2",
     "@deepseek-ai/dsh-system-prompt": "0.1.5-rc.2",
     "@deepseek-ai/dsh-typert-protocol": "0.1.5-rc.2",
     "@deepseek-ai/dsh-home-paths": "0.1.5-rc.2"
@@ -88,7 +93,8 @@
         "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-renderer",
-        "@deepseek-ai/dsh-client-ui-sidebar-right"
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-primitives"
       ]
     }
   },

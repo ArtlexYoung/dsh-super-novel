@@ -23,9 +23,11 @@ test('bundle preserves custom roots, discovery flags and the author default', as
 test('bundle composes in both orders without replacing the super-code preset config', async () => {
   const own = yaml.load(await readFile('cordis.patch.yml', 'utf8'), { schema: entryListSchema })
   const code = yaml.load(await readFile('../dsh-super-code/cordis.patch.yml', 'utf8'), { schema: entryListSchema })
+  const baseline = [{ id: 'agent-presets', name: '@deepseek-ai/dsh-agent-presets', config: { default: 'standard' } }]
+  const expected = applyEntryPatches(structuredClone(baseline), code, message => assert.fail(message)).find(x => x.id === 'agent-presets').config
   for (const patches of [[...code, ...own], [...own, ...code]]) {
-    const rows = applyEntryPatches([{ id: 'agent-presets', name: '@deepseek-ai/dsh-agent-presets', config: { default: 'standard' } }], patches, message => assert.fail(message))
-    assert.deepEqual(rows.find(x => x.id === 'agent-presets').config, code[0].config)
+    const rows = applyEntryPatches(structuredClone(baseline), patches, message => assert.fail(message))
+    assert.deepEqual(rows.find(x => x.id === 'agent-presets').config, expected)
     assert.equal(rows.filter(x => x.id === 'dsh-super-novel').length, 1)
   }
 })
@@ -59,6 +61,7 @@ test('real Loader discovers host RPC and mounts the writing persona only in its 
   assert.equal(ctx.agentPresets.defaultId, 'standard')
   assert(ctx.typert.local.get('superNovel/status'))
   assert(ctx.typert.local.get('superNovel/enable'))
+  for (const name of ['library', 'createBook', 'chapter', 'changeChapter', 'recoverBook']) assert(ctx.typert.local.get(`superNovel/${name}`))
   const handle = await ctx.agents.create({ sessionId: SessionId('write-p0'), setup: async agentCtx => { await ctx.agentPresets.mount(agentCtx, 'dsh-super-novel') } })
   t.after(() => handle.dispose())
   const writing = await ctx.systemPrompt.assemble(assembleContextFor(handle.agent))

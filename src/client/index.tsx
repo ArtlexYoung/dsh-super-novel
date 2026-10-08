@@ -1,34 +1,10 @@
 /** Browser contribution uses the public sidebar slots and generated Remote codecs. */
 import React, { useEffect, useState } from 'react'
 import contribution from '../../lib/typert.remote-client.js'
+import { Books, unwrap } from './books.js'
+import { zh, en } from './locales.js'
 const NS = 'superNovel'
-const zh = {
-  title: '小说生成工作台', intro: '启用专门生成小说的模式，保留其他模式和默认设置。',
-  preview: '技术预览：当前提供小说生成模式与侧栏入口。章节管理、事实回填和独立审校正在开发。',
-  available: '小说生成模式尚未启用', enabled: '小说生成模式已就绪',
-  enabledHint: '请在宿主模式选择器中选择 Super Novel · 小说生成，开始对话。',
-  enable: '启用小说生成模式', resume: '继续启用', refresh: '重新检查', working: '正在启用…',
-  incomplete: '上次启用未完成，可以继续。', unavailable: '当前宿主无法提供可用的用户预设目录或发现该模式。',
-  conflict: '已有同名内容或预设被修改。为保护你的设置，未进行覆盖。',
-  busy: '另一次启用仍在进行，或上次进程退出后留下了锁。请查看安装恢复说明。',
-  error: '读取或启用失败。请检查宿主日志和目录权限后重试。', loading: '正在检查小说生成模式…',
-}
-const en = {
-  title: 'Novel generation workspace', intro: 'Enable a novel-generation mode while keeping your existing modes and default.',
-  preview: 'Technical preview: novel-generation mode and sidebar entry only. Chapter management, fact updates, and independent review are in development.',
-  available: 'Novel-generation mode is not enabled', enabled: 'Novel-generation mode is ready',
-  enabledHint: 'Select Super Novel · 小说生成 in the host mode picker to begin.',
-  enable: 'Enable novel-generation mode', resume: 'Resume setup', refresh: 'Check again', working: 'Enabling…',
-  incomplete: 'Setup was interrupted and can be resumed.', unavailable: 'The host cannot provide a usable user preset root or discover this mode.',
-  conflict: 'The name is occupied or the preset was modified. Your existing files were preserved.',
-  busy: 'Another setup is running, or a previous process left a lock. See setup recovery instructions.',
-  error: 'Could not read or enable the preset. Check host logs and directory permissions, then retry.', loading: 'Checking novel-generation mode…',
-}
-function unwrap(result) {
-  if (!result.ok) throw new Error(result.error.message)
-  return result.value
-}
-function Setup({ api, t }) {
+function Setup({ api, sessionId, t }) {
   const [state, setState] = useState({ kind: 'loading' })
   const [refresh, setRefresh] = useState(0)
   useEffect(() => {
@@ -52,14 +28,14 @@ function Setup({ api, t }) {
     finally { pending.current = null }
   }
   const status = state.kind === 'ready' ? state.value.state : state.kind
-  return <section className="super-novel-setup" aria-label={t('title')}>
-    <h2>{t('title')}</h2><p>{t('intro')}</p>
+  return <div className="super-novel-setup">
+    <Books key={sessionId} api={api} sessionId={sessionId} t={t} />
+    <details className="sn-setup"><summary>{t('setup')}</summary>
     <p role={status === 'error' || status === 'conflict' ? 'alert' : 'status'}>{t(status)}</p>
-    {status === 'enabled' && <p>{t('enabledHint')}</p>}
     {(status === 'available' || status === 'incomplete') && <button onClick={enable}>{t(status === 'incomplete' ? 'resume' : 'enable')}</button>}
     {status !== 'working' && status !== 'loading' && <button onClick={() => setRefresh(value => value + 1)}>{t('refresh')}</button>}
-    <aside>{t('preview')}</aside>
-  </section>
+    </details>
+  </div>
 }
 function TabTitle({ t }) { return <span>{t('title')}</span> }
 export const inject = ['remote', 'slots', 'sidebarRightTabs', 'locale']
@@ -84,7 +60,7 @@ export async function apply(ctx) {
   })
   ctx.effect(() => {
     const style = document.createElement('style')
-    style.textContent = `.super-novel-setup{padding:24px 20px;overflow:auto;height:100%;box-sizing:border-box;font-size:14px;line-height:1.7}.super-novel-setup h2{font-size:18px;margin:0 0 12px}.super-novel-setup p{overflow-wrap:anywhere}.super-novel-setup button{font:inherit;color:inherit;background:transparent;border:1px solid var(--dsw-alias-border-l1,#999);border-radius:8px;min-height:36px;padding:5px 12px;margin:4px 8px 8px 0;cursor:pointer}.super-novel-setup button:focus-visible{outline:2px solid currentColor;outline-offset:3px}.super-novel-setup aside{margin-top:28px;padding-top:16px;border-top:1px solid var(--dsw-alias-border-l1,#999);font-size:12px;opacity:.75}`
+    style.textContent = `.super-novel-setup{padding:16px;overflow:auto;height:100%;box-sizing:border-box;font-size:14px;line-height:1.6;letter-spacing:0}.super-novel-setup *{box-sizing:border-box}.super-novel-setup h2{font-size:16px;margin:0;font-weight:600}.super-novel-setup p{overflow-wrap:anywhere;margin:8px 0}.super-novel-setup button,.super-novel-setup input,.super-novel-setup select{font:inherit;color:inherit;border:1px solid var(--dsw-alias-border-l1,#aaa);border-radius:4px;min-height:32px;background:transparent;min-width:0}.super-novel-setup button{padding:4px 8px;cursor:pointer}.super-novel-setup button:disabled{opacity:.4;cursor:default}.super-novel-setup :focus-visible{outline:2px solid var(--dsw-alias-brand,#3478d4);outline-offset:2px}.super-novel-setup input,.super-novel-setup select{padding:5px 8px;width:100%}.sn-toolbar{display:flex;align-items:center;gap:8px;min-height:36px}.sn-toolbar h2{flex:1}.sn-icon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:0 0 32px;padding:0!important}.sn-workspace{font-size:12px;opacity:.65;margin:4px 0 12px;overflow-wrap:anywhere}.sn-field{display:grid;gap:4px;margin:8px 0}.sn-row{display:flex;gap:6px;align-items:center;margin:8px 0}.sn-row input{flex:1}.sn-chapters{max-height:180px;overflow:auto;border-top:1px solid var(--dsw-alias-border-l1,#aaa);border-bottom:1px solid var(--dsw-alias-border-l1,#aaa);margin-top:16px;padding:4px 0}.sn-chapters button{display:flex;gap:8px;text-align:left;width:100%;border:0;border-radius:0;align-items:baseline;overflow-wrap:anywhere}.sn-chapters button[aria-current=true]{background:var(--dsw-alias-bg-l2,rgba(120,120,120,.12));font-weight:600}.sn-number{min-width:24px;font-size:12px;opacity:.6}.sn-editor-toolbar{justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--dsw-alias-border-l1,#aaa);padding-top:8px;margin-top:12px}.sn-editor-toolbar [role=status]{font-size:12px;opacity:.7}.sn-modes{display:flex}.sn-modes button{border:0}.sn-modes button[aria-pressed=true]{background:var(--dsw-alias-bg-l2,rgba(120,120,120,.12))}.sn-books textarea,.sn-preview{width:100%;height:360px;min-height:200px;max-height:70vh;overflow:auto;resize:vertical;font:inherit;line-height:1.8;color:inherit;background:transparent;border:1px solid var(--dsw-alias-border-l1,#aaa);border-radius:4px;padding:12px;margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}.sn-preview{margin-top:8px}.sn-alert{color:var(--dsw-alias-warning,#b85c00)}.sn-notice{font-size:12px;opacity:.75}.sn-recovery-actions{flex-wrap:wrap}.sn-recovery-actions button{font-size:12px}.sn-setup{margin-top:20px;border-top:1px solid var(--dsw-alias-border-l1,#aaa);padding-top:12px}.sn-setup summary{cursor:pointer;font-size:12px}.sn-setup p{font-size:12px}.sn-setup button{margin:4px 6px 4px 0}@media(min-width:900px){.sn-books textarea,.sn-preview{height:460px}}`
     document.head.appendChild(style)
     return () => style.remove()
   })
