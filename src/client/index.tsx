@@ -1,5 +1,5 @@
 /** Browser contribution uses the public sidebar slots and generated Remote codecs. */
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from './primitives.js'
 import React, { useEffect, useState } from 'react'
 import contribution from '../../lib/typert.remote-client.js'
 import { Books, unwrap } from './books.js'

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Select } from './controls.js'
-import { Button, Input, Tag, IconPlusOutline16, IconEditOutline16, IconRefreshOutline16, IconCheckOutline16, IconChevronUpOutline14, IconChevronDownOutline14, IconSparkle16, IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Tag, IconPlusOutline16, IconEditOutline16, IconRefreshOutline16, IconCheckOutline16, IconChevronUpOutline14, IconChevronDownOutline14, IconSparkle16, IconCloseOutline16 } from './primitives.js'
 import { Proposals } from './proposals.js'
 import { ChapterRecovery, InterruptedRecovery } from './history.js'
 import { MaterialCreator } from './material-creator.js'

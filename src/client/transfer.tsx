@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Select } from './controls.js'
-import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input } from './primitives.js'
 import { unwrap } from './books.js'
 export function Transfer({ api, sessionId, book, writable, t, imported }) {
   const [request, setRequest] = useState(null), [preview, setPreview] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [scope, setScope] = useState('chapters'), [format, setFormat] = useState('md')

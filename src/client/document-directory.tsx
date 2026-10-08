@@ -1,6 +1,6 @@
 import React from 'react'
 import { Select } from './controls.js'
-import { Button, Input, IconSearchOutline16, IconChevronDownOutline14, IconChevronLeftOutline14, IconChevronRightOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, IconSearchOutline16, IconChevronDownOutline14, IconChevronLeftOutline14, IconChevronRightOutline14 } from './primitives.js'
 import { materialKinds } from './materials.js'
 
 /** Filters affect navigation only; the selected draft remains mounted. */

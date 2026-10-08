@@ -17,7 +17,7 @@ test('hot unload settles review and extraction, releases locks and reinstall rea
   const root = await mkdtemp(resolve('.test-output/lifecycle-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const ctx = new Context()
-  ctx.provide('sessionPersistence', { stat: async () => undefined }); ctx.provide('agentPresets', {})
+  ctx.provide('sessionPersistence', { stat: async () => undefined }); ctx.provide('agentPresets', { roots: [], list: async () => [] })
   ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'lifecycle-fixture', model: 'deepseek-v4.1-flash' }) })
   ctx.plugin(Sessions); ctx.plugin(Projection); ctx.plugin(Policy); ctx.plugin(LocalFs); ctx.plugin(Llm)
   const plugin = ctx.plugin(SuperNovel)

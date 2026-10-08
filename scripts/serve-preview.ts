@@ -1,8 +1,9 @@
 /** Start only the task-owned preview profile; keep its session URL out of logs. */
 import { spawn } from 'node:child_process'
-import { writeFile } from 'node:fs/promises'
+import { writeFile, rm } from 'node:fs/promises'
 import { resolve } from 'node:path'
 const output = resolve(process.argv[2] ?? '.test-output/preview-v003')
+for (const name of ['sessions-check.json', 'fixture-error.json']) await rm(resolve(output, name), { force: true })
 const child = spawn(process.execPath, [resolve('../deepseek-harness/apps/cli/lib/bin.js'), '--profile', 'web', '--no-open', '--port', '0'], {
   env: { ...process.env, DSH_HOME: resolve(output, 'home'), DSH_AGENTS_HOME: resolve(output, 'agents') },
   stdio: ['ignore', 'pipe', 'pipe'],

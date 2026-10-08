@@ -19,7 +19,7 @@ test('real Cordis service dispatches candidate remotes with optional model servi
   const ctx = new Context()
   ctx.provide('sessionPersistence', { stat: async () => undefined })
   ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'fixed', model: 'deepseek-v4.1-flash' }) })
-  ctx.provide('agentPresets', {})
+  ctx.provide('agentPresets', { roots: [], list: async () => [] })
   ctx.plugin(Sessions); ctx.plugin(Projection); ctx.plugin(Policy, { mode: 'read-only' }); ctx.plugin(LocalFs); ctx.plugin(Llm)
   ctx.plugin(SuperNovel)
   t.after(() => ctx.fiber.dispose())

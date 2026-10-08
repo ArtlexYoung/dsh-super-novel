@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Select } from './controls.js'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from './primitives.js'
 import { unwrap } from './books.js'
 
 export function InterruptedRecovery({ api, sessionId, bookId, writable, t, saved }) {

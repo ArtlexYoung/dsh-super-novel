@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { withWorkspace, openBookCreator, openGeneration } from './browser-workspace.ts'
-const output = resolve(process.argv[2]), mode = process.argv[3] ?? 'workflow'
-const targetPath = join(output, 'workflow-book-id')
-const calls = () => readFile(join(output, 'generation-calls.json'), 'utf8').then(text => JSON.parse(text).length, () => 0)
-const before = await calls()
-await withWorkspace(output, async page => {
+import { pathToFileURL } from 'node:url'
+import { withWorkspace, openBookCreator, openGeneration, openHostSettings } from './browser-workspace.ts'
+
+export async function checkWritingWorkflow(page, output, mode = 'workflow', resize = size => page.setViewportSize(size)) {
+  const exitFullscreen = page.getByRole('button', { name: 'Exit fullscreen', exact: true })
+  if (await exitFullscreen.isVisible()) await exitFullscreen.click()
+  const targetPath = join(output, 'workflow-book-id')
+  const calls = () => readFile(join(output, 'generation-calls.json'), 'utf8').then(text => JSON.parse(text).length, () => 0)
+  const before = await calls()
   const body = page.locator('textarea[aria-label="Chapter text"]'), tabs = page.locator('.sn-work-tabs')
   const material = page.getByRole('textbox', { name: 'Material text', exact: true })
   const proposals = page.locator('.sn-proposals'), reviews = page.locator('.sn-reviews'), facts = page.locator('.sn-facts')
@@ -80,12 +83,17 @@ await withWorkspace(output, async page => {
     return
   }
   await tab('writing')
-  await page.getByRole('button', { name: 'Settings', exact: true }).click(); await page.getByRole('button', { name: 'Light', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
-  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click(); await page.setViewportSize({ width: 900, height: 800 })
+  await openHostSettings(page); await page.getByRole('button', { name: 'Light', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click(); await resize({ width: 900, height: 800 })
   await tabs.scrollIntoViewIfNeeded(); await page.screenshot({ path: join(output, 'workflow-en-light.png') })
   assert(await page.locator('.super-novel-setup').evaluate(element => element.scrollWidth <= element.clientWidth))
-  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click(); await page.setViewportSize({ width: 1440, height: 1000 })
-  await page.getByRole('button', { name: 'Settings', exact: true }).click(); await page.getByRole('button', { name: 'Dark', exact: true }).click(); await page.getByRole('button', { name: 'English', exact: true }).click(); await page.getByText('中文', { exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click()
-  await page.getByRole('button', { name: '全屏', exact: true }).click(); await page.setViewportSize({ width: 900, height: 800 }); await tabs.scrollIntoViewIfNeeded(); await page.screenshot({ path: join(output, 'workflow-zh-dark.png') })
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click(); await resize({ width: 1440, height: 1000 })
+  await openHostSettings(page); await page.getByRole('button', { name: 'Dark', exact: true }).click(); await page.getByRole('button', { name: 'English', exact: true }).click(); await page.getByText('中文', { exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('button', { name: '全屏', exact: true }).click(); await resize({ width: 900, height: 800 }); await tabs.scrollIntoViewIfNeeded(); await page.screenshot({ path: join(output, 'workflow-zh-dark.png') })
   console.log(`PASS ${mode}: planning, draft, review, local revision, reassessment, adoption, facts, next chapter and cancellation.`)
-})
+}
+
+if (import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  const output = resolve(process.argv[2]), mode = process.argv[3] ?? 'workflow'
+  await withWorkspace(output, page => checkWritingWorkflow(page, output, mode))
+}

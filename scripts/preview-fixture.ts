@@ -4,10 +4,20 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 export const inject = ['workspaceController', 'sessionController', 'sessions', 'agentPresets', 'superNovel', 'llm', 'settings']
-export async function apply(ctx, config = {}) {
+export function apply(ctx, config = {}) {
+  // 0.2 roster diagnostics may await the Loader, so never query them while this row is activating.
+  const task = ctx.fiber.await().then(() => seed(ctx, config))
+  task.catch(async error => {
+    await writeFile(resolve(process.env.DSH_HOME, '../fixture-error.json'), JSON.stringify({ message: error.message }))
+    ctx.logger.error(error)
+  })
+  ctx.effect(() => async () => { await task })
+}
+
+async function seed(ctx, config) {
   if (config.locale === 'en') await ctx.settings.update('locale', { preference: 'en' })
   const roster = await ctx.agentPresets.list()
-  assert.equal(ctx.agentPresets.defaultId, 'standard')
+  assert.notEqual(ctx.agentPresets.defaultId, 'dsh-super-novel')
   assert(!roster.some(row => row.broken))
   await writeFile(resolve(process.env.DSH_HOME, '../profile-check.json'), JSON.stringify({
     defaultId: ctx.agentPresets.defaultId, presets: roster.map(row => row.id),
@@ -26,6 +36,7 @@ export async function apply(ctx, config = {}) {
     }
     await ctx.sessionController.rename({ sessionId, title: sessionId })
   }
+  await writeFile(resolve(process.env.DSH_HOME, '../fixture-stage.json'), JSON.stringify({ stage: 'sessions-created' }))
   if (config.generationFixture === true) {
     const { apply } = await import('./preview-generation.ts')
     await apply(ctx)

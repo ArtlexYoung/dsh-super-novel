@@ -14,6 +14,7 @@ export async function apply(ctx) {
   })
   assert(Array.isArray(calls))
   class FixedAdapter extends LlmAdapter {
+    async listModels(provider) { return [{ provider, id: 'deepseek-v4.1-flash', name: 'Fixed-response fixture' }] }
     async *stream(options) {
       assert.equal(options.provider, 'novel-fixture')
       assert.equal(options.tools.length, 0)
@@ -56,7 +57,7 @@ export async function apply(ctx) {
   for (const sessionId of ['super-novel-preview-a', 'super-novel-preview-b', 'super-novel-preview-readonly']) {
     await ctx.sessionController.selectModel({ sessionId, provider: 'novel-fixture', model: 'deepseek-v4.1-flash' })
   }
-  const { modelForSession } = await import('../lib/host/chapter-generator.js')
+  const { modelForSession } = await import(new URL('./host/chapter-generator.js', import.meta.resolve('dsh-super-novel')).href)
   for (const sessionId of ['super-novel-preview-a', 'super-novel-preview-b']) {
     assert.equal(modelForSession(ctx, ctx.sessions.get(sessionId)).provider, 'novel-fixture')
   }

@@ -6,7 +6,7 @@ DeepSeek Harness 的小说写作插件，提供本地作品、章节编辑和右
 
 在聊天中规划故事、起草章节、续写或润色。预设会提醒模型关注人物动机、情节连续性、作者文风和修改范围；模型、权限和工具沿用 Harness 的配置。
 
-当前 `0.1.4` 是本地写作流程测试版，支持作品、章节、故事资料、文风授权、导入导出、起草、续写、选段改写和润色。生成结果单独保存为候选；作者查看改动并采纳后，才更新正式正文或资料。保存检查版本和正文哈希，发生外部冲突时保留原稿。
+当前 `0.1.5` 是本地写作流程测试版，支持作品、章节、故事资料、文风授权、导入导出、起草、续写、选段改写和润色。生成结果单独保存为候选；作者查看改动并采纳后，才更新正式正文或资料。保存检查版本和正文哈希，发生外部冲突时保留原稿。
 
 工作台沿用 DSH 的组件和主题。打开文档先看内容，AI 助手单独一页，生成后直接审阅候选。新建、导入导出和文档选项按需展开；保存按钮显示状态，支持 ⌘/Ctrl+S。目录可搜索、分类和筛选关联章节，窄侧栏可折叠，宽面板与内容分别滚动；切页和缩放保留草稿。
 
@@ -14,17 +14,24 @@ DeepSeek Harness 的小说写作插件，提供本地作品、章节编辑和右
 
 ## 安装
 
-需要 DeepSeek Harness `0.1.5-rc.2`，Node.js `^22.19.0 || >=24.0.0`。DSH NEXT `2.0.17-next` 使用宿主 `0.2.0-rc.2`，会跳过本版插件。
+支持 DeepSeek Harness `^0.1.5-rc.2 || ^0.2.0-rc.2`，需要 Node.js `^22.19.0 || >=24.0.0`。新版预设、通信校验和图标接口已适配，保留旧版支持。
+
+| 已实测宿主 | 环境与结果 |
+| --- | --- |
+| `0.1.5-rc.2` | macOS Web：完整写作流程与重启恢复通过 |
+| `0.2.0-rc.2` | macOS DSH NEXT `2.0.17-next` 安装版：侧栏、完整写作流程与重启恢复通过 |
+
+其他符合范围的版本尚未逐个运行；Safari、Windows/Linux 仍待验收。
 
 取得本地安装包后，在目标 profile 中安装（将路径替换为实际绝对路径）：
 
 ```sh
-dsh plugin --profile web add /absolute/path/dsh-super-novel-0.1.4.tgz
+dsh plugin --profile web add /absolute/path/dsh-super-novel-0.1.5.tgz
 ```
 
-从源码生成安装包见[开发说明](docs/development.md)。市场收录与 npm 发布是独立流程，本说明不代表当前版本已上架。
+DSH NEXT 可从「插件」→「添加插件」填入安装包的绝对路径。安装到实际使用的 profile，完成后按宿主提示重新加载。从源码生成安装包见[开发说明](docs/development.md)。市场收录与 npm 发布是独立流程，本说明不代表当前版本已上架。
 
-安装异常时，在实际 profile 目录运行 `node node_modules/dsh-super-novel/scripts/doctor.mjs`，检查 Node、构建文件和依赖版本；该命令只读，不调用模型。已测试 macOS Web 与 `0.1.5-rc.2` 桌面开发壳的侧栏；签名桌面发行版和 Windows/Linux 仍待验收。
+安装异常时，在实际 profile 目录运行 `node node_modules/dsh-super-novel/scripts/doctor.mjs`，检查 Node、构建文件和依赖版本；该命令只读，不调用模型。
 
 ## 使用
 
@@ -39,13 +46,13 @@ dsh plugin --profile web add /absolute/path/dsh-super-novel-0.1.4.tgz
 
 正文提供「正文」「AI 助手」「事实与文风」「审校」四个入口；资料提供「内容」「AI 助手」。可预览 Markdown/TXT 分章后导入新作品，按正文或资料导出并回读。作者可授权选中正文作为叙述或人物对白样本，生成时主动选用；授权可撤销，来源变化后停止使用。
 
-生成使用当前会话所选模型，不读取其他作品或聊天历史。请先保存手工改动；参考资料由作者主动填写或勾选。需要聊天写作时，可以展开「写作模式」启用 **Super Novel · 小说生成**，聊天回复仍需手工保存。
+生成使用当前会话所选模型，不读取其他作品或聊天历史。请先保存手工改动；参考资料由作者主动填写或勾选。聊天写作可在宿主选择 **Super Novel · 小说生成**；`0.1` 宿主须先展开「写作模式」启用，`0.2` 宿主随插件注册。不会改变默认模式，聊天回复仍需手工保存。
 
 未保存输入会尽量保留在浏览器本地；清除浏览器数据会丢失这部分草稿，正式保存的正文不受影响。
 
 [![完整写作工作台](docs/screenshots/workflow-zh-dark.png)](docs/screenshots/workflow-zh-dark.png)
 
-截图来自 `0.1.4` 实际安装包，正文与资料是手写合成样本，AI 候选使用固定响应。macOS Web 与桌面开发壳侧栏通过；真实模型质量、Safari、签名桌面发行版和 Windows/Linux 验收尚未完成。
+截图来自 `0.1.4` 实际安装包，正文与资料是手写合成样本，AI 候选使用固定响应。`0.1.5` 已补验本机 DSH NEXT 安装版；真实模型质量、Safari 和 Windows/Linux 验收尚未完成。
 
 [![资料目录与编辑](docs/screenshots/sidebar-materials-zh-dark.png)](docs/screenshots/sidebar-materials-zh-dark.png)
 

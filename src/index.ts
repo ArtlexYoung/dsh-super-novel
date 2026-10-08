@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent-presets'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { PresetInstaller } from './host/preset-install.js'
+import { createPresetSetup } from './host/preset-setup.js'
 import type { PresetStatus } from './types.js'
 import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, LibrarySnapshot } from './types.js'
 import { storageResult, workspaceBooks } from './host/workspace-books.js'
@@ -35,10 +35,10 @@ declare module '@deepseek-ai/cordis' {
   interface Context { superNovel: SuperNovel }
 }
 
-/** User-initiated preset setup; it never changes the default mode or existing roots. */
+/** Host-specific preset setup; it never changes the default mode or existing roots. */
 export class SuperNovel extends TypertRemoteService {
   static inject = ['agentPresets']
-  private readonly installer: PresetInstaller
+  private readonly installer: ReturnType<typeof createPresetSetup>
   private readonly tasks = new ProposalTasks()
   private readonly lifetime = new AbortController()
   private readonly extractions = new Map<string, Promise<FactProposal>>()
@@ -46,7 +46,7 @@ export class SuperNovel extends TypertRemoteService {
 
   constructor(ctx: Context) {
     super(ctx, 'superNovel', { namespace: 'superNovel' })
-    this.installer = new PresetInstaller(ctx.agentPresets, fileURLToPath(new URL('../presets/dsh-super-novel/', import.meta.url)), JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version)
+    this.installer = createPresetSetup(ctx, ctx.agentPresets, fileURLToPath(new URL('../presets/dsh-super-novel/', import.meta.url)), JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version)
     ctx.effect(() => async () => {
       this.lifetime.abort()
       await Promise.allSettled([this.tasks.dispose(), ...this.extractions.values(), ...this.reviews.values()])

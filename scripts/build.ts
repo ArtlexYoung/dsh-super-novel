@@ -4,6 +4,7 @@ import { resolve, join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WorkspaceTypertGenerator } from '@deepseek-ai/dsh-typert-generator'
 import { build } from 'esbuild'
+import { withCodecFactories } from './compat-codecs.ts'
 const root = resolve('.build/typert')
 await rm(root, { recursive: true, force: true })
 const pkg = join(root, 'packages/super-novel')
@@ -26,9 +27,9 @@ await writeFile(join(root, 'tsconfig.host.json'), JSON.stringify({ compilerOptio
 const artifacts = new WorkspaceTypertGenerator(root).generate(['dsh-super-novel'], ['host'])
 if (artifacts.length !== 1 || !artifacts[0].remote) throw new Error('Expected one Host artifact with a strict Remote contribution')
 const artifact = artifacts[0]
-await writeFile('lib/typert.host.js', artifact.js)
+await writeFile('lib/typert.host.js', withCodecFactories(artifact.js))
 await writeFile('lib/typert.host.d.ts', artifact.dts.replace(/^\/\/# sourceMappingURL=.*$/gm, ''))
-await writeFile('lib/typert.remote-client.js', artifact.remote.js)
+await writeFile('lib/typert.remote-client.js', withCodecFactories(artifact.remote.js))
 await writeFile('lib/typert.remote-client.d.ts', artifact.remote.dts.replace(/^\/\/# sourceMappingURL=.*$/gm, ''))
 await build({
   entryPoints: ['src/client/index.tsx'], outfile: 'lib/client.js', bundle: true,

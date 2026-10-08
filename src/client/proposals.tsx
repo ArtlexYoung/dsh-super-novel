@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Select } from './controls.js'
-import { Button, IconCheckOutline16, IconCloseOutline16, IconSparkle16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCheckOutline16, IconCloseOutline16, IconSparkle16 } from './primitives.js'
 import { unwrap } from './books.js'
 import { materialInstruction, materialSources } from './materials.js'
 

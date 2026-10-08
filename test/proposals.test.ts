@@ -139,7 +139,10 @@ test('timeout, empty output and failed completion never become reviewable; no re
     }, signal()).then(resolve)
   })
   await done
-  await new Promise(resolve => setTimeout(resolve, 50))
+  // Wait for the durable terminal checkpoint; disk latency can exceed the timeout itself.
+  const deadline = Date.now() + 5000
+  while (tasks.active(store, request.bookId, request.proposalId) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(tasks.active(store, request.bookId, request.proposalId), false)
   const view = await store.view(request.bookId, request.proposalId, false)
   assert.equal(view.reason, 'generation-timeout')
   assert.equal(view.state, 'interrupted')

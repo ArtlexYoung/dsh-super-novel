@@ -22,7 +22,7 @@ npm test
 npm run pack:check
 ```
 
-链接脚本只在本项目 `node_modules` 中添加缺失链接。重新安装依赖后，需要再次运行。宿主依赖使用精确预发布版本，其他版本需另行验证。
+链接脚本只在本项目 `node_modules` 中添加缺失链接。重新安装依赖后，需要再次运行。类型检查与生成器沿用 `0.1.5-rc.2` 基线；运行依赖支持 `^0.1.5-rc.2 || ^0.2.0-rc.2`。新旧预设包为可选替代项，宿主须提供其中一种，所有 peer 必须复用宿主实例。
 
 ## 检查范围
 
@@ -59,7 +59,7 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 资料页直接生成用 `scripts/browser-material-generation.ts`，覆盖七类资料、默认名称与要求、资料和正文来源、采纳/拒绝、创建后失败重试、停止、切书隔离。停服重开后附加 `reopen`，确认资料和未完成候选保留，查询不调用模型。
 
-侧栏适配用 `scripts/browser-sidebar.ts`，覆盖七类混合资料、类型/关联章节/名称筛选、100 项分页、目录折叠、300/420px 拖动侧栏和 900px 全屏。它同时检查切页和缩放保留草稿、候选与采纳结果，以及 ⌘/Ctrl+S 保存；停服重启后附加 `reopen`，确认查询不会重新生成。共享辅助函数通过可见入口打开新建、AI 设置和文档选项。该浏览器命令使用 Chromium，只验证 Web；桌面原生协议的补验范围见[评测说明](evaluation.md)。
+侧栏适配用 `scripts/browser-sidebar.ts`，覆盖七类混合资料、类型/关联章节/名称筛选、100 项分页、目录折叠、300/420px 拖动侧栏和 900px 全屏。它同时检查切页和缩放保留草稿、候选与采纳结果，以及 ⌘/Ctrl+S 保存；停服重启后附加 `reopen`，确认查询不会重新生成。共享辅助函数通过可见入口打开新建、AI 设置和文档选项，等待固定响应夹具就绪后才测试。该浏览器命令使用 Chromium，只验证 Web；桌面原生协议的实测范围见[评测说明](evaluation.md)。
 
 事实工作流用 `scripts/browser-facts.ts` 验证提取、采纳、引用定位、下一章上下文及旧章变化后过期。固定响应只能证明流程，事实含义与连续写作质量仍需真实模型和人工评阅。
 
@@ -81,4 +81,6 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 `screenshots.json` 声明本仓库的真实安装包截图，图中版本和固定响应限制见 README。源码不包含编译产物，市场安装需已构建 tarball；取得 GitHub Release 下载地址后再投稿，不把源码地址当成可直接安装的发布包。
 
-平台补验可在对应机器执行上面的类型、构建、测试和包检查，再运行实际包 workflow/reopen。Windows 的目录 fsync 限制及文件占用重试已有模拟回归，不能替代 Windows/Linux 和签名桌面发行版验收。POSIX 权限测试在 Windows 跳过，跳过项必须记录。
+兼容回归检查两代预设服务、卸载释放、默认模式不变、RPC 严格 schema 和图标导出。macOS 已用未修改的 DSH NEXT `2.0.17-next` 安装版、隔离 profile 和真实 tarball 运行侧栏及完整写作 workflow/reopen；宿主为 `0.2.0-rc.2`，没有兼容豁免。
+
+平台补验可在对应机器执行上面的类型、构建、测试和包检查，再运行实际包 workflow/reopen。Windows 的目录 fsync 限制及文件占用重试已有模拟回归，不能替代 Windows/Linux 实机验收。其他桌面版本也需单独验证。POSIX 权限测试在 Windows 跳过，跳过项必须记录。

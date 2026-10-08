@@ -3,7 +3,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { withWorkspace, showContent, openGeneration, openDocumentOptions } from './browser-workspace.ts'
+import { withWorkspace, showContent, openGeneration, openDocumentOptions, openHostSettings } from './browser-workspace.ts'
 
 /** A mixed directory exercises pagination and links without calling a provider. */
 export async function createSidebarFixture(output) {
@@ -33,6 +33,8 @@ export async function createSidebarFixture(output) {
 
 /** The same controls run in Web and the native Electron custom-protocol page. */
 export async function checkSidebar(page, output, identity, resize = size => page.setViewportSize(size), mode = 'workflow') {
+  const exitFullscreen = page.getByRole('button', { name: 'Exit fullscreen', exact: true })
+  if (await exitFullscreen.isVisible()) await exitFullscreen.click()
   const directory = page.locator('.sn-directory'), content = page.locator('.sn-document'), materials = page.locator('textarea[aria-label="Material text"]')
   const tab = name => page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name, exact: true }).click()
   const creator = page.locator('.sn-material-creator'), panel = page.locator('.sn-proposals')
@@ -149,7 +151,7 @@ export async function checkSidebar(page, output, identity, resize = size => page
   // The fullscreen pane covers the host rail; open host settings in docked mode.
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click()
   await resize({ width: 1440, height: 1000 })
-  await page.getByRole('button', { name: 'Settings', exact: true }).click(); await page.getByRole('button', { name: 'Dark', exact: true }).click(); await page.getByRole('button', { name: 'English', exact: true }).click(); await page.getByText('中文', { exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click()
+  await openHostSettings(page); await page.getByRole('button', { name: 'Dark', exact: true }).click(); await page.getByRole('button', { name: 'English', exact: true }).click(); await page.getByText('中文', { exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click()
   await page.getByLabel('筛选资料类型', { exact: true }).waitFor()
   await page.getByRole('button', { name: '全屏', exact: true }).click()
   await resize({ width: 900, height: 800 })

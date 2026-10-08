@@ -3,6 +3,7 @@ import { readFile, access, realpath } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { satisfies } from 'semver'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
@@ -35,20 +36,28 @@ async function installedPackage(name, resolver = require) {
 }
 
 for (const [name, expected] of Object.entries({ ...manifest.peerDependencies, ...manifest.dependencies })) {
-  try {
-    const installed = await installedPackage(name), actual = installed.version
-    let compatible = actual === expected
-    const lower = /^\^([1-9][0-9]*)\.([0-9]+)\.([0-9]+)$/.exec(expected)
-    if (lower) {
-      const tuple = /^([0-9]+)\.([0-9]+)\.([0-9]+)$/.exec(actual)
-      compatible = !!tuple && tuple[1] === lower[1] && (Number(tuple[2]) > Number(lower[2]) || Number(tuple[2]) === Number(lower[2]) && Number(tuple[3]) >= Number(lower[3]))
+  let installed
+  try { installed = await installedPackage(name) }
+  catch {
+    if (manifest.peerDependenciesMeta?.[name]?.optional) {
+      console.log(`OK ${name}: optional Host alternative not installed`)
+      continue
     }
-    check(compatible, `${name}: ${actual}; required ${expected}`)
+    check(false, `${name}: missing or unreadable; required ${expected}`)
+    continue
+  }
+  try {
+    check(satisfies(installed.version, expected, { includePrerelease: true }), `${name}: ${installed.version}; required ${expected}`)
     if (profileRequire && name in manifest.peerDependencies) {
       const host = await installedPackage(name, profileRequire)
       check(host.path === installed.path, `${name}: shares the profile Host instance`)
     }
   } catch { check(false, `${name}: missing or unreadable; required ${expected}`) }
+}
+const presetAlternatives = ['@deepseek-ai/dsh-agent-presets', '@deepseek-ai/dsh-agent-preset-registry']
+if (presetAlternatives.every(name => manifest.peerDependenciesMeta?.[name]?.optional)) {
+  const available = await Promise.all(presetAlternatives.map(name => installedPackage(name).then(() => true, () => false)))
+  check(available.some(Boolean), 'Host provides file-based presets or the preset registry')
 }
 console.log(`Installation diagnostics: ${failures.length} failure(s). Runtime services and model quality are not checked.`)
 process.exitCode = failures.length ? 1 : 0

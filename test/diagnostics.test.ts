@@ -27,6 +27,16 @@ test('installation diagnostics are read-only and distinguish missing artifacts, 
   const before = await readdir(root), bytes = await readFile(join(root, 'package.json'))
   const passed = run(); assert.equal(passed.status, 0); assert.match(passed.stdout, /0 failure/)
   assert.deepEqual(await readdir(root), before); assert.deepEqual(await readFile(join(root, 'package.json')), bytes)
+  manifest.peerDependencies['doctor-fixture-peer'] = '^0.1.5-rc.2 || ^0.2.0-rc.2'
+  manifest.peerDependencies['doctor-optional'] = '^0.1.5-rc.2 || ^0.2.0-rc.2'
+  manifest.peerDependenciesMeta = { 'doctor-optional': { optional: true } }
+  await writeFile(join(root, 'package.json'), JSON.stringify(manifest))
+  for (const version of ['0.1.5-rc.3', '0.2.0-rc.2', '0.2.1']) {
+    await writeFile(join(root, 'node_modules/doctor-fixture-peer/package.json'), JSON.stringify({ name: 'doctor-fixture-peer', version }))
+    assert.equal(run().status, 0, version)
+  }
+  await writeFile(join(root, 'node_modules/doctor-fixture-peer/package.json'), JSON.stringify({ name: 'doctor-fixture-peer', version: '0.3.0-rc.1' }))
+  assert.equal(run().status, 1)
 })
 
 test('profile diagnostics reject a separate peer instance even when both versions match', async t => {
