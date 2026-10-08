@@ -1,5 +1,9 @@
 export const zh = {
   title: '小说工作台', intro: '作品与章节',
+  reviews: '审校与修订', reviewEvidence: '审校候选原文', reviewTarget: '审校对象', savedChapter: '已保存正文', mechanicalLimits: '字数与段数', minCharacters: '最少字数', maxCharacters: '最多字数（0 不限）', minParagraphs: '最少段数', maxParagraphs: '最多段数（0 不限）',
+  runReview: '开始审校', reviewRecords: '审校记录', characters: '字', paragraphs: '段', 'review-passed': '已检查，未发现问题', 'review-issues': '发现问题', 'review-unknown': '检查未完成', 'review-degraded': '依据不完整', 'review-expired': '审校已过期',
+  mechanical: '机械检查', continuity: '连续性', causality: '因果', language: '语言', 'dimension-checked': '已检查', 'dimension-unknown': '未知', 'dimension-degraded': '降级', reviseIssue: '生成局部修订',
+  'character-limit': '字数不在设定范围', 'paragraph-limit': '段数不在设定范围', placeholder: '正文含占位内容或代码围栏', 'review-not-found': '未找到审校记录。', 'review-stale': '审校依据已变化，请重新检查。', 'revision-limit': '已达到两轮修订上限，请人工处理。',
   facts: '事实与摘要', extractFacts: '提取事实候选', acceptFacts: '采纳事实', factsPending: '本章事实待补全', factsAccepted: '本章事实已采纳', manualFact: '从选区添加事实',
   subject: '对象', predicate: '状态或事件', factValue: '事实内容', knowledgeScope: '知情范围', contextScope: '上下文知情范围', reader: '读者', unknownCharacter: '未知人物', saveFactCandidate: '保存事实候选', factRecords: '事实记录', locateEvidence: '定位原文',
   useFacts: '使用前章事实', 'context-complete': '事实上下文完整', 'context-degraded': '前章事实待补全', 'context-expired': '前章事实已过期', 'context-over-budget': '事实超出预算', 'context-loading': '正在检查事实',
@@ -63,6 +67,10 @@ export const zh = {
 
 export const en = {
   title: 'Novel workspace', intro: 'Books and chapters',
+  reviews: 'Review and revision', reviewEvidence: 'Reviewed candidate text', reviewTarget: 'Review target', savedChapter: 'Saved chapter', mechanicalLimits: 'Character and paragraph limits', minCharacters: 'Minimum characters', maxCharacters: 'Maximum characters (0 unlimited)', minParagraphs: 'Minimum paragraphs', maxParagraphs: 'Maximum paragraphs (0 unlimited)',
+  runReview: 'Run review', reviewRecords: 'Review records', characters: 'characters', paragraphs: 'paragraphs', 'review-passed': 'Checked, no issues found', 'review-issues': 'Issues found', 'review-unknown': 'Review incomplete', 'review-degraded': 'Incomplete evidence', 'review-expired': 'Review expired',
+  mechanical: 'Mechanical', continuity: 'Continuity', causality: 'Causality', language: 'Language', 'dimension-checked': 'Checked', 'dimension-unknown': 'Unknown', 'dimension-degraded': 'Degraded', reviseIssue: 'Generate local revision',
+  'character-limit': 'Character count is outside the specified range', 'paragraph-limit': 'Paragraph count is outside the specified range', placeholder: 'Placeholder or code fence found', 'review-not-found': 'Review record not found.', 'review-stale': 'Review sources changed. Check again.', 'revision-limit': 'Two revision rounds reached. Continue manually.',
   facts: 'Facts and summary', extractFacts: 'Extract fact candidate', acceptFacts: 'Accept facts', factsPending: 'Chapter facts need completion', factsAccepted: 'Chapter facts accepted', manualFact: 'Add fact from selection',
   subject: 'Subject', predicate: 'State or event', factValue: 'Fact value', knowledgeScope: 'Knowledge scope', contextScope: 'Context knowledge scope', reader: 'Reader', unknownCharacter: 'Unknown character', saveFactCandidate: 'Save fact candidate', factRecords: 'Fact records', locateEvidence: 'Locate source',
   useFacts: 'Use previous chapter facts', 'context-complete': 'Fact context complete', 'context-degraded': 'Previous chapter facts need completion', 'context-expired': 'Previous chapter facts expired', 'context-over-budget': 'Facts exceed budget', 'context-loading': 'Checking facts',

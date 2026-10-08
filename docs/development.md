@@ -58,6 +58,8 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 事实工作流用 `scripts/browser-facts.ts` 验证提取、采纳、引用定位、下一章上下文及旧章变化后过期。固定响应只能证明流程，事实含义与连续写作质量仍需真实模型和人工评阅。
 
+审校工作流用 `scripts/browser-reviews.ts` 验证占位检查、定位、局部修订、复核、采纳和重启。单测覆盖无效引用、损坏记录、输入预算和两轮上限；固定响应不能证明审校准确率或修订质量。
+
 ## 打包与发布
 
 安装包包含编译产物、预设、bundle patch、README、文档和许可证。使用者安装 tarball 不需要生成器或相邻源码仓库。

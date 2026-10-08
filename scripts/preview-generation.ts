@@ -22,6 +22,12 @@ export async function apply(ctx) {
         yield { type: 'finish', reason: { kind: 'stop' } }
         return
       }
+      if (input.task === 'review-fiction') {
+        const at = input.text.indexOf('[TODO]')
+        yield { type: 'text-delta', index: 0, text: JSON.stringify({ dimensions: ['continuity', 'character', 'causality', 'language'].map(dimension => ({ dimension, state: 'checked' })), issues: at < 0 ? [] : [{ dimension: 'language', severity: 'error', message: '移除占位内容。', suggestion: '将占位内容写成完整动作。', quote: '[TODO]', start: at, end: at + 6, references: [] }] }) }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+        return
+      }
       if (input.instruction.includes('[empty]')) { yield { type: 'finish', reason: { kind: 'stop' } }; return }
       yield { type: 'text-delta', index: 0, text: '候选前句。\n' }
       if (input.instruction.includes('[slow]')) {

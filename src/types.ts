@@ -65,6 +65,9 @@ export interface GenerateChapterRequest {
   readonly materialIds?: readonly string[]
   readonly useFacts?: boolean
   readonly knowledgeScope?: string
+  readonly parentProposalId?: string
+  readonly reviewId?: string
+  readonly issueId?: string
 }
 export interface MaterialSnapshot {
   readonly chapterId: string
@@ -165,6 +168,7 @@ export interface ProposalView extends ProposalSummary {
   readonly elapsedMs: number
   readonly usage: GenerationUsage
   readonly context?: readonly MaterialSnapshot[]
+  readonly revisionRound?: number
 }
 export interface ProposalDecisionRequest {
   readonly bookId: string
@@ -235,4 +239,43 @@ export interface SettleInterruptedSaveRequest {
   readonly pendingHash: string
   readonly diskHash: string
   readonly content: string
+}
+export interface ReviewRequest {
+  readonly reviewId: string
+  readonly bookId: string
+  readonly chapterId: string
+  readonly proposalId: string
+  readonly expectedRevision: number
+  readonly expectedHash: string
+  readonly minCharacters: number
+  readonly maxCharacters: number
+  readonly minParagraphs: number
+  readonly maxParagraphs: number
+}
+export interface ReviewIssue {
+  readonly issueId: string
+  readonly dimension: 'mechanical' | 'continuity' | 'character' | 'causality' | 'language'
+  readonly severity: 'warning' | 'error'
+  readonly message: string
+  readonly suggestion: string
+  readonly quote: string
+  readonly start: number
+  readonly end: number
+  readonly references: readonly string[]
+}
+export interface ReviewView {
+  readonly reviewId: string
+  readonly bookId: string
+  readonly chapterId: string
+  readonly proposalId: string
+  readonly textHash: string
+  readonly state: 'passed' | 'issues' | 'unknown' | 'degraded' | 'expired'
+  readonly reason: string
+  readonly issues: readonly ReviewIssue[]
+  readonly dimensions: readonly { readonly dimension: 'continuity' | 'character' | 'causality' | 'language'; readonly state: 'checked' | 'unknown' | 'degraded' }[]
+  readonly characters: number
+  readonly paragraphs: number
+  readonly createdAt: number
+  readonly elapsedMs: number
+  readonly usage: GenerationUsage
 }

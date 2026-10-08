@@ -19,6 +19,8 @@ import type { InterruptedChapterSave, SettleInterruptedSaveRequest } from './typ
 import type { FactProposal, ProposeFactsRequest, FactContext, GenerateFactsRequest } from './types.js'
 import { FactStore } from './host/fact-store.js'
 import { extractFacts } from './host/fact-extraction.js'
+import type { ReviewRequest, ReviewView } from './types.js'
+import { ReviewStore } from './host/review-store.js'
 
 export type { PresetStatus } from './types.js'
 export type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, LibrarySnapshot } from './types.js'
@@ -37,6 +39,7 @@ export class SuperNovel extends TypertRemoteService {
   private readonly tasks = new ProposalTasks()
   private readonly lifetime = new AbortController()
   private readonly extractions = new Map<string, Promise<FactProposal>>()
+  private readonly reviews = new Map<string, Promise<ReviewView>>()
 
   constructor(ctx: Context) {
     super(ctx, 'superNovel', { namespace: 'superNovel' })
@@ -198,6 +201,42 @@ export class SuperNovel extends TypertRemoteService {
       const task = extractFacts(scope.store, await FactStore.at(scope.root, scope.workspaceId, scope.store), request, hostTextGenerator(this.ctx, scope.session), AbortSignal.any([signal, this.lifetime.signal, AbortSignal.timeout(300_000)]))
       this.extractions.set(key, task)
       try { return await task } finally { if (this.extractions.get(key) === task) this.extractions.delete(key) }
+    })
+  }
+
+  /** Mechanical checks and isolated model review produce a persistent read-only assessment. */
+  @Remote
+  async reviewChapter(sessionId: string, request: ReviewRequest, signal: AbortSignal): Promise<ReviewView> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      const key = `${scope.workspaceId}:${JSON.stringify(request)}`
+      const existing = this.reviews.get(key)
+      if (existing) return await existing
+      let generate: ReturnType<typeof hostTextGenerator> | false = false
+      try { generate = hostTextGenerator(this.ctx, scope.session) } catch {}
+      const task = (await ReviewStore.at(scope.root, scope.workspaceId, scope.store)).run(request, generate, AbortSignal.any([signal, this.lifetime.signal, AbortSignal.timeout(300_000)]))
+      this.reviews.set(key, task)
+      try { return await task } finally { if (this.reviews.get(key) === task) this.reviews.delete(key) }
+    })
+  }
+
+  @Remote
+  async chapterReviews(sessionId: string, bookId: string, chapterId: string, signal: AbortSignal): Promise<ReviewView[]> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await ReviewStore.at(scope.root, scope.workspaceId, scope.store)).list(bookId, chapterId)
+    })
+  }
+
+  /** A reviewed issue authorizes one local revision candidate, capped at two rounds. */
+  @Remote
+  async reviseIssue(sessionId: string, bookId: string, reviewId: string, issueId: string, proposalId: string, signal: AbortSignal): Promise<ProposalView> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      const review = await ReviewStore.at(scope.root, scope.workspaceId, scope.store)
+      const revision = await review.revision(bookId, reviewId, issueId)
+      const store = await ProposalStore.at(scope.root, scope.workspaceId, scope.store)
+      return await this.tasks.start(store, sessionId, { ...revision.request, proposalId }, hostChapterGenerator(this.ctx, scope.session), signal)
     })
   }
 

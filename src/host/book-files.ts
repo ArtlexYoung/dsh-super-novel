@@ -45,7 +45,8 @@ export class BookFiles {
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { exists: false, text: '' }; throw error }
     try {
       const info = await handle.stat()
-      if (!info.isFile() || info.nlink !== 1) throw new BookError('unsafe-path')
+      // Atomic replacement can unlink an already-open, valid old inode.
+      if (!info.isFile() || info.nlink > 1) throw new BookError('unsafe-path')
       if (info.size > maxBytes) throw new BookError('too-large')
       const chunks: Buffer[] = []
       let used = 0

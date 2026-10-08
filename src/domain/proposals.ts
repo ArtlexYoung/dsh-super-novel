@@ -12,6 +12,7 @@ export const generationRequestSchema = z.strictObject({
   start: z.int().nonnegative(), end: z.int().nonnegative(),
   materialIds: z.array(idSchema).max(100).refine(ids => new Set(ids).size === ids.length).optional(),
   useFacts: z.boolean().optional(), knowledgeScope: z.union([idSchema, z.literal('reader')]).optional(),
+  parentProposalId: idSchema.optional(), reviewId: idSchema.optional(), issueId: idSchema.optional(),
 })
 const materialSchema = z.strictObject({ chapterId: idSchema, title: titleSchema, kind: documentKindSchema,
   revision: z.int().positive(), hash: digest, content: contentSchema })
@@ -31,6 +32,7 @@ export const proposalSchema = z.strictObject({
   documentKind: documentKindSchema.optional(), context: z.array(materialSchema).max(100).optional(),
   factContext: z.strictObject({ content: contentSchema, scope: z.union([idSchema, z.literal('reader')]),
     sources: z.array(z.strictObject({ chapterId: idSchema, revision: z.int().positive(), hash: digest, recordId: idSchema, recordHash: digest })).max(10_000) }).optional(),
+  parentCandidateHash: digest.optional(), revisionRound: z.int().min(1).max(2).optional(),
 })
 export type Proposal = z.infer<typeof proposalSchema>
 
@@ -54,7 +56,7 @@ export function parseProposal(text: string, workspaceId: string, bookId: string,
   if (!result.success) throw new BookError('invalid-format')
   const proposal = result.data
   if (proposal.workspaceId !== workspaceId || proposal.request.bookId !== bookId || proposal.request.proposalId !== proposalId ||
-    proposal.requestHash !== hash(json(proposal.request)) || proposal.request.expectedHash !== hash(proposal.baseline) ||
+    proposal.requestHash !== hash(json(proposal.request)) || (proposal.request.parentProposalId ? proposal.parentCandidateHash !== hash(proposal.baseline) : proposal.request.expectedHash !== hash(proposal.baseline)) ||
     proposal.candidateHash !== hash(candidate(proposal)) || !contentSchema.safeParse(candidate(proposal)).success) throw new BookError('invalid-format')
   const selected = proposal.request.materialIds ?? []
   const context = proposal.context ?? []
@@ -76,7 +78,7 @@ export function proposalView(proposal: Proposal, state: ProposalView['state'], r
     baselineHash: proposal.request.expectedHash, baseline: proposal.baseline, start: proposal.request.start, end: proposal.request.end,
     replacement: proposal.replacement, candidate: candidate(proposal), candidateHash: proposal.candidateHash,
     instruction: proposal.request.instruction, materials: proposal.request.materials, elapsedMs: proposal.elapsedMs, usage: proposal.usage as GenerationUsage,
-    ...(proposal.context ? { context: proposal.context } : {}) }
+    ...(proposal.context ? { context: proposal.context } : {}), ...(proposal.revisionRound ? { revisionRound: proposal.revisionRound } : {}) }
 }
 
 export function generationPrompt(proposal: Proposal): string {

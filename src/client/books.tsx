@@ -4,6 +4,7 @@ import { Proposals } from './proposals.js'
 import { ChapterRecovery, InterruptedRecovery } from './history.js'
 import { materialKinds, materialTemplate } from './materials.js'
 import { Facts } from './facts.js'
+import { Reviews } from './reviews.js'
 
 export function unwrap(result) {
   if (!result.ok) {
@@ -227,6 +228,7 @@ export function Books({ api, sessionId, t }) {
           }} />}
           {entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} />}
           {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Facts key={`facts:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} locate={(start, end) => { setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
+          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Reviews key={`reviews:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} t={t} revisionHint={refresh} revised={() => setRefresh(value => value + 1)} locate={(start, end) => { setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
         </>}
       </>}
     </>}
