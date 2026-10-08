@@ -12,10 +12,15 @@ import type { GenerateChapterRequest, ProposalDecisionRequest, ProposalSummary, 
 import { ProposalStore } from './host/proposal-store.js'
 import { ProposalTasks } from './host/proposal-tasks.js'
 import { hostChapterGenerator } from './host/chapter-generator.js'
+import { ChapterHistory } from './host/chapter-history.js'
+import { ChapterConflicts } from './host/chapter-conflicts.js'
+import type { ChapterHistorySummary, ChapterHistoryVersion, RestoreChapterRequest, ChapterConflict, PreserveConflictRequest, ResolveConflictRequest } from './types.js'
+import type { InterruptedChapterSave, SettleInterruptedSaveRequest } from './types.js'
 
 export type { PresetStatus } from './types.js'
 export type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, LibrarySnapshot } from './types.js'
 export type { GenerateChapterRequest, ProposalDecisionRequest, ProposalSummary, ProposalView } from './types.js'
+export type { ChapterHistorySummary, ChapterHistoryVersion, RestoreChapterRequest, ChapterConflict, PreserveConflictRequest, ResolveConflictRequest } from './types.js'
 
 declare module '@deepseek-ai/cordis' {
   interface Context { superNovel: SuperNovel }
@@ -84,6 +89,63 @@ export class SuperNovel extends TypertRemoteService {
   @Remote
   async recoverBook(sessionId: string, bookId: string, signal: AbortSignal): Promise<BookSnapshot> {
     return await storageResult(async () => (await workspaceBooks(this.ctx, sessionId, true, signal)).store.recover(bookId, signal))
+  }
+
+  /** Preview current and intended text of a pending chapter save without writing. */
+  @Remote
+  async interruptedSave(sessionId: string, bookId: string, signal: AbortSignal): Promise<InterruptedChapterSave> {
+    return await storageResult(async () => (await workspaceBooks(this.ctx, sessionId, false, signal)).store.interrupted(bookId))
+  }
+
+  /** Keep the original intention, then publish explicitly reviewed text as a new revision. */
+  @Remote
+  async settleInterruptedSave(sessionId: string, request: SettleInterruptedSaveRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => (await workspaceBooks(this.ctx, sessionId, true, signal)).store.settleInterrupted(request, signal))
+  }
+
+  /** Read up to 100 saved versions before a book revision; zero starts at the latest. */
+  @Remote
+  async chapterHistory(sessionId: string, bookId: string, chapterId: string, beforeRevision: number, signal: AbortSignal): Promise<ChapterHistorySummary[]> {
+    return await storageResult(async () => new ChapterHistory((await workspaceBooks(this.ctx, sessionId, false, signal)).store).list(bookId, chapterId, beforeRevision))
+  }
+
+  /** Read one immutable chapter version without changing the current text. */
+  @Remote
+  async chapterVersion(sessionId: string, bookId: string, chapterId: string, operationId: string, signal: AbortSignal): Promise<ChapterHistoryVersion> {
+    return await storageResult(async () => new ChapterHistory((await workspaceBooks(this.ctx, sessionId, false, signal)).store).read(bookId, chapterId, operationId))
+  }
+
+  /** Restore selected text as a new revision after rechecking the actual disk baseline. */
+  @Remote
+  async restoreChapter(sessionId: string, request: RestoreChapterRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => new ChapterHistory((await workspaceBooks(this.ctx, sessionId, true, signal)).store).restore(request, signal))
+  }
+
+  /** Preserve both the author's local draft and the current disk text. */
+  @Remote
+  async preserveConflict(sessionId: string, request: PreserveConflictRequest, signal: AbortSignal): Promise<ChapterConflict> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await (await ChapterConflicts.at(scope.root, scope.workspaceId, scope.store)).preserve(request, signal)
+    })
+  }
+
+  /** Read retained drafts and their completed resolution states without writing. */
+  @Remote
+  async chapterConflicts(sessionId: string, bookId: string, chapterId: string, signal: AbortSignal): Promise<ChapterConflict[]> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await ChapterConflicts.at(scope.root, scope.workspaceId, scope.store)).list(bookId, chapterId)
+    })
+  }
+
+  /** Save the explicitly selected disk, local or merged text with version protection. */
+  @Remote
+  async resolveConflict(sessionId: string, request: ResolveConflictRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await (await ChapterConflicts.at(scope.root, scope.workspaceId, scope.store)).resolve(request, signal)
+    })
   }
 
   /** Explicit generation creates a separate durable candidate using the Session's model. */

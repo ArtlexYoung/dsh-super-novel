@@ -98,3 +98,68 @@ export interface ProposalDecisionRequest {
   readonly proposalId: string
   readonly expectedCandidateHash: string
 }
+
+export interface ChapterHistorySummary {
+  readonly operationId: string
+  readonly chapterId: string
+  readonly chapterRevision: number
+  readonly bookRevision: number
+  readonly hash: string
+  readonly source: 'save' | 'restore' | 'conflict'
+  readonly sourceId: string
+}
+export interface ChapterHistoryVersion extends ChapterHistorySummary { readonly content: string }
+export interface RestoreChapterRequest {
+  readonly operationId: string
+  readonly bookId: string
+  readonly chapterId: string
+  readonly sourceOperationId: string
+  readonly expectedSourceHash: string
+  readonly expectedRevision: number
+  readonly expectedHash: string
+}
+export interface PreserveConflictRequest {
+  readonly conflictId: string
+  readonly bookId: string
+  readonly chapterId: string
+  readonly baselineRevision: number
+  readonly baselineHash: string
+  readonly localContent: string
+}
+export interface ChapterConflict {
+  readonly conflictId: string
+  readonly bookId: string
+  readonly chapterId: string
+  readonly baselineRevision: number
+  readonly baselineHash: string
+  readonly localContent: string
+  readonly diskContent: string
+  readonly diskRevision: number
+  readonly diskHash: string
+  readonly createdAt: number
+  readonly resolved: boolean
+}
+export interface ResolveConflictRequest {
+  readonly operationId: string
+  readonly bookId: string
+  readonly conflictId: string
+  readonly expectedRevision: number
+  readonly expectedHash: string
+  readonly choice: 'disk' | 'local' | 'merged'
+  readonly mergedContent: string
+}
+export interface InterruptedChapterSave {
+  readonly bookId: string
+  readonly chapterId: string
+  readonly pendingHash: string
+  readonly diskHash: string
+  readonly diskContent: string
+  readonly preparedContent: string
+}
+export interface SettleInterruptedSaveRequest {
+  readonly operationId: string
+  readonly bookId: string
+  readonly pendingHash: string
+  readonly diskHash: string
+  readonly content: string
+}

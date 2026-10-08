@@ -14,11 +14,13 @@ export const bookSchema = z.strictObject({
 export type Book = z.infer<typeof bookSchema>
 
 const fileStateSchema = z.strictObject({ exists: z.boolean(), text: contentSchema })
+export const transactionSourceSchema = z.strictObject({ kind: z.enum(['restore', 'conflict']), id: idSchema, requestHash: digest })
 export const transactionSchema = z.strictObject({
   schemaVersion: z.literal(1), operationId: idSchema, bookId: idSchema,
   requestHash: digest, state: z.enum(['prepared', 'completed']),
   before: z.string().max(4 * 1024 * 1024), after: bookSchema,
   changes: z.array(z.strictObject({ chapterId: idSchema, before: fileStateSchema, after: contentSchema })).max(1),
+  source: transactionSourceSchema.optional(),
 })
 export type Transaction = z.infer<typeof transactionSchema>
 

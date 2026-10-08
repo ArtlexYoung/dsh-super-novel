@@ -52,6 +52,8 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 使用已安装的 Playwright 路径运行 `scripts/browser-proposals.ts`，重启后用 `reopen` 参数复验。`--generation` 仅为隔离 profile 注册固定响应适配器，不联系 provider；同一 profile 的浏览器检查要串行。真实模型测试会产生调用费用，方法和历史结果见[评测说明](evaluation.md)。固定响应不能证明文学质量或跨平台兼容。
 
+历史与冲突界面使用新 profile，运行 `scripts/browser-history.ts`，重启后附加 `reopen` 参数。它核对历史恢复、保留两稿、手工合并和中断后第三种正文的显式恢复。阶段错误通过注入模拟，不能作为实际磁盘满或断电验收。
+
 ## 打包与发布
 
 安装包包含编译产物、预设、bundle patch、README、文档和许可证。使用者安装 tarball 不需要生成器或相邻源码仓库。

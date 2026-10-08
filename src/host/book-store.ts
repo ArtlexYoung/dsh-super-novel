@@ -1,9 +1,9 @@
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { BookError, contentSchema, hash, idSchema, json, parseBook, snapshot, titleSchema, transactionSchema } from '../domain/books.js'
+import { BookError, contentSchema, hash, idSchema, json, parseBook, snapshot, titleSchema, transactionSchema, transactionSourceSchema } from '../domain/books.js'
 import type { Book, Transaction } from '../domain/books.js'
-import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest } from '../types.js'
+import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, InterruptedChapterSave, SettleInterruptedSaveRequest } from '../types.js'
 import { BookFiles } from './book-files.js'
 
 const ROOT = 'novels'
@@ -48,8 +48,11 @@ export class BookStore {
   }
 
   private parseTransaction(text: string, bookId: string): Transaction {
+    let value: unknown
+    try { value = JSON.parse(text) } catch { throw new BookError('invalid-format') }
+    if (typeof value === 'object' && value !== null && 'schemaVersion' in value && value.schemaVersion !== 1) throw new BookError('unsupported-format')
     let transaction: Transaction
-    try { transaction = transactionSchema.parse(JSON.parse(text)) } catch { throw new BookError('invalid-format') }
+    try { transaction = transactionSchema.parse(value) } catch { throw new BookError('invalid-format') }
     if (transaction.bookId !== bookId || transaction.after.bookId !== bookId) throw new BookError('invalid-format')
     for (const change of transaction.changes) {
       if (transaction.after.chapters.find(chapter => chapter.chapterId === change.chapterId)?.hash !== hash(change.after)) throw new BookError('invalid-format')
@@ -158,13 +161,14 @@ export class BookStore {
     return [receipt]
   }
 
-  async mutate(input: ChapterMutationRequest, signal: AbortSignal): Promise<BookSnapshot> {
+  async mutate(input: ChapterMutationRequest, signal: AbortSignal, source?: Transaction['source']): Promise<BookSnapshot> {
     const request = mutationSchema.parse(input)
+    const origin = source ? transactionSourceSchema.parse(source) : undefined
     return await this.files.lock(join(this.folder(request.bookId), '.write.lock'), async () => {
       signal.throwIfAborted()
       const items = await this.transactions(request.bookId)
       if ((await this.creation(request.bookId)).length) throw new BookError('recovery-required')
-      const requestHash = hash(json(request))
+      const requestHash = origin ? hash(json({ request, source: origin })) : hash(json(request))
       if (items.some(item => item.operationId === request.operationId) || (await this.files.read(this.transactionPath(request.bookId, request.operationId), 32 * 1024 * 1024)).exists) return await this.replay(request.bookId, request.operationId, requestHash)
       if (items.some(item => item.state === 'prepared')) throw new BookError('recovery-required')
       const file = await this.files.read(this.manifest(request.bookId))
@@ -201,7 +205,7 @@ export class BookStore {
       }
       // Revalidate generated data too: limits are enforced before a journal is published.
       parseBook(json(next), book.bookId)
-      return await this.commit({ schemaVersion: 1, operationId: request.operationId, bookId: book.bookId, requestHash, state: 'prepared', before: file.text, after: next, changes }, signal)
+      return await this.commit({ schemaVersion: 1, operationId: request.operationId, bookId: book.bookId, requestHash, state: 'prepared', before: file.text, after: next, changes, ...(origin ? { source: origin } : {}) }, signal)
     })
   }
 
@@ -258,5 +262,78 @@ export class BookStore {
       if (transaction) await this.publish(transaction)
       return await this.readBook(bookId)
     })
+  }
+
+  /** Explicit recovery only; the interrupted intention stays in an immutable archive. */
+  async interrupted(bookId: string): Promise<InterruptedChapterSave> {
+    const pending = await this.files.read(this.pendingPath(bookId), 32 * 1024 * 1024)
+    if (!pending.exists) throw new BookError('recovery-not-found')
+    const transaction = this.parseTransaction(pending.text, bookId)
+    if (transaction.changes.length !== 1 || (await this.creation(bookId)).length) throw new BookError('recovery-manual')
+    const change = transaction.changes[0]!
+    const file = await this.files.read(this.chapterPath(bookId, change.chapterId))
+    if (!file.exists) throw new BookError('chapter-not-found')
+    return { bookId, chapterId: change.chapterId, pendingHash: hash(pending.text), diskHash: hash(file.text), diskContent: file.text, preparedContent: change.after }
+  }
+
+  async settleInterrupted(input: SettleInterruptedSaveRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    const digest = z.string().regex(/^[a-f0-9]{64}$/)
+    const request = z.strictObject({ operationId: idSchema, bookId: idSchema, pendingHash: digest, diskHash: digest, content: contentSchema }).parse(input)
+    return await this.files.lock(join(this.folder(request.bookId), '.write.lock'), async () => {
+      signal.throwIfAborted()
+      const requestHash = hash(json(request))
+      const pending = await this.files.read(this.pendingPath(request.bookId), 32 * 1024 * 1024)
+      const receipt = await this.files.read(this.transactionPath(request.bookId, request.operationId), 32 * 1024 * 1024)
+      if (receipt.exists) return await this.replay(request.bookId, request.operationId, requestHash)
+      if (!pending.exists) throw new BookError('recovery-not-found')
+      const original = this.parseTransaction(pending.text, request.bookId)
+      if (original.operationId === request.operationId) {
+        if (original.requestHash !== requestHash) throw new BookError('operation-conflict')
+        await this.publish(original)
+        return snapshot(original.after)
+      }
+      if (hash(pending.text) !== request.pendingHash) throw new BookError('revision-conflict')
+      if (original.changes.length !== 1 || (await this.creation(request.bookId)).length) throw new BookError('recovery-manual')
+      const manifest = await this.files.read(this.manifest(request.bookId))
+      if (!manifest.exists || (manifest.text !== original.before && manifest.text !== json(original.after))) throw new BookError('recovery-conflict')
+      const chapterId = original.changes[0]!.chapterId
+      const disk = await this.files.read(this.chapterPath(request.bookId, chapterId))
+      if (!disk.exists || hash(disk.text) !== request.diskHash) throw new BookError('revision-conflict')
+      const next = parseBook(manifest.text, request.bookId)
+      next.revision = Math.max(next.revision, original.after.revision) + 1
+      let chapter = next.chapters.find(item => item.chapterId === chapterId)
+      const prepared = original.after.chapters.find(item => item.chapterId === chapterId)!
+      if (!chapter) { chapter = { ...prepared }; next.chapters.push(chapter) }
+      chapter.revision = Math.max(chapter.revision, prepared.revision) + 1
+      chapter.hash = hash(request.content)
+      parseBook(json(next), request.bookId)
+      const replacement: Transaction = { schemaVersion: 1, operationId: request.operationId, bookId: request.bookId,
+        requestHash, state: 'prepared', before: manifest.text, after: next, changes: [{ chapterId, before: disk, after: request.content }] }
+      const text = json(replacement)
+      if (Buffer.byteLength(text, 'utf8') > 32 * 1024 * 1024 || Buffer.byteLength(json(next), 'utf8') > 4 * 1024 * 1024) throw new BookError('too-large')
+      const folder = join(this.folder(request.bookId), 'recoveries')
+      await this.files.directory(folder)
+      const archive = join(folder, `${original.operationId}.json`)
+      const retained = await this.files.read(archive, 32 * 1024 * 1024)
+      if (retained.exists && retained.text !== pending.text) throw new BookError('operation-conflict')
+      if (!retained.exists) await this.files.replace(archive, pending.text, retained)
+      // Replacing the pending journal is the only transition; interruption on either side is recoverable.
+      await this.files.replace(this.pendingPath(request.bookId), text, pending)
+      await this.hooks.afterStage?.('prepared')
+      await this.publish(replacement)
+      return snapshot(next)
+    })
+  }
+
+  /** Existing receipts form the immutable history; no secondary history write is required. */
+  async *receipts(bookId: string): AsyncGenerator<Transaction, void> {
+    const folder = await this.files.path(join(this.folder(bookId), 'transactions'))
+    let names: string[]
+    try { names = await readdir(folder) } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error }
+    for (const name of names) {
+      if (name.endsWith('.json') && idSchema.safeParse(name.slice(0, -5)).success) {
+        for (const receipt of await this.receipt(bookId, name.slice(0, -5))) yield receipt
+      }
+    }
   }
 }

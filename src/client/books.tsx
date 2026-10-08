@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { IconPlusOutline16, IconEditOutline16, IconRefreshOutline16, IconCheckOutline16, IconChevronUpOutline14, IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Proposals } from './proposals.js'
+import { ChapterRecovery, InterruptedRecovery } from './history.js'
 
 export function unwrap(result) {
   if (!result.ok) {
@@ -178,6 +179,7 @@ export function Books({ api, sessionId, t }) {
         <IconButton label={t('createBook')} icon={IconPlusOutline16} type="submit" disabled={busy || !library.writable || !bookTitle.trim()} />
       </form>
       {book?.recoveryRequired && <button disabled={busy || !library.writable} onClick={() => action(async signal => applyBook(unwrap(await api.recoverBook(sessionId, bookId, signal))))}>{t('recover')}</button>}
+      {book?.recoveryRequired && <InterruptedRecovery key={bookId} api={api} sessionId={sessionId} bookId={bookId} writable={library.writable && !busy} t={t} saved={applyBook} />}
       {book && !book.recoveryRequired && <>
         <nav className="sn-chapters" aria-label={t('chapter')}>
           {!book.chapters.length && <p>{t('noChapters')}</p>}
@@ -203,6 +205,10 @@ export function Books({ api, sessionId, t }) {
           {notice && <p className="sn-notice" role="status">{t(notice)}</p>}
           {entry && (editing ? <textarea aria-label={t('body')} spellCheck={false} value={entry.content} readOnly={!writable} onSelect={event => setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd })} onChange={event => storeDraft({ ...entry, content: event.target.value, operationId: crypto.randomUUID() })} /> : <pre className="sn-preview" aria-label={t('body')}>{entry.content}</pre>)}
           <div className="sn-row sn-recovery-actions"><button disabled={!entry || busy} onClick={readDisk}>{t('reloadDisk')}</button><button disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</button></div>
+          {entry && <ChapterRecovery key={`history:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} stale={stale} t={t} onBusy={setBusy} saved={() => {
+            try { localStorage.removeItem(entryKey) } catch { setError('draftFailed'); return }
+            setRefresh(value => value + 1)
+          }} />}
           {entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} adopted={() => setRefresh(value => value + 1)} />}
         </>}
       </>}

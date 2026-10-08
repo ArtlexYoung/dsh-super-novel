@@ -74,6 +74,7 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
   const incomplete = view?.state === 'interrupted'
   return <section className="sn-proposals" aria-label={t('proposals')}>
     <h3>{t('proposals')}</h3>
+    {view?.state === 'expired' && <button disabled={busy} onClick={() => { setMode(view.mode); setInstruction(view.instruction); setMaterials(view.materials) }}>{t('reuseRequirements')}</button>}
     {error && <p role="alert" className="sn-alert">{t(error)}</p>}
     <div className="sn-generation">
       <label className="sn-field">{t('generationMode')}<select aria-label={t('generationMode')} value={mode} disabled={busy} onChange={event => setMode(event.target.value)}>
