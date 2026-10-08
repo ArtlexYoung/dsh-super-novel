@@ -1,8 +1,9 @@
 /** Real Web + packed plugin smoke. Requires the isolated preview, never calls a model. */
 import assert from 'node:assert/strict'
 import { pathToFileURL } from 'node:url'
-import { readFile, mkdir } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { visitPreview } from './browser-workspace.ts'
 const output = resolve(process.argv[2] ?? '.test-output/preview-v003')
 const playwrightPath = process.env.PLAYWRIGHT_MODULE
 if (!playwrightPath) throw new Error('Set PLAYWRIGHT_MODULE to the existing Playwright index.ts path')
@@ -18,7 +19,7 @@ try {
   for (const name of ['Continue', 'Configure later']) {
     await page.addLocatorHandler(page.getByRole('button', { name, exact: true }), button => button.click())
   }
-  await page.goto(await readFile(resolve(output, 'preview-url'), 'utf8'))
+  await visitPreview(page, output)
   await page.getByRole('button', { name: /^(Settings|设置)$/ }).waitFor()
   if (await page.getByRole('button', { name: '设置', exact: true }).isVisible()) {
     await page.getByRole('button', { name: '设置', exact: true }).click()
@@ -36,7 +37,8 @@ try {
     if (!await body.isVisible()) await guide.click()
     await body.waitFor()
     assert.equal(await body.count(), 1)
-    if (!await body.locator('details').evaluate(element => element.open)) await body.locator('summary').click()
+    const setup = body.locator('.sn-setup')
+    if (!await setup.evaluate(element => element.open)) await setup.locator(':scope > summary').click()
   }
   await openPanel()
   const enable = page.getByRole('button', { name: 'Enable novel-generation mode', exact: true })

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile, readdir, mkdir } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { withWorkspace } from './browser-workspace.ts'
+import { withWorkspace, openBookCreator, openGeneration } from './browser-workspace.ts'
 const output = resolve(process.argv[2])
 const mode = process.argv[3] ?? 'workflow'
 await withWorkspace(output, async page => {
@@ -10,6 +10,7 @@ await withWorkspace(output, async page => {
   const panel = page.locator('.sn-proposals')
   const saved = () => page.locator('.sn-editor-toolbar [role=status]').filter({ hasText: /^Saved$/ }).waitFor()
   if (mode === 'workflow') {
+    await openBookCreator(page)
     await page.getByRole('textbox', { name: 'Book title', exact: true }).fill('场景渡河')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
     await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第一章')
@@ -24,15 +25,16 @@ await withWorkspace(output, async page => {
     assert((await material.inputValue()).includes('Private intent'))
     await material.fill('左腕受伤，不能游泳。目的：渡河。转折：船索断裂。')
     await page.getByRole('button', { name: 'Save', exact: true }).click(); await saved()
+    await openGeneration(page)
     await panel.getByRole('textbox', { name: 'Writing instructions', exact: true }).fill('写完整场景蓝图。')
     await panel.getByRole('button', { name: 'Generate', exact: true }).click()
     await panel.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Ready for review$/ }).waitFor()
     await panel.getByRole('button', { name: 'Accept', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Material text"]')?.value.includes('候选前句'))
-    await page.getByRole('tab', { name: 'Chapters', exact: true }).click()
+    await page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name: 'Chapters', exact: true }).click()
     await body.waitFor()
     assert.equal(await body.inputValue(), '')
-    await page.locator('.sn-work-tabs').getByRole('tab', { name: 'Revisions', exact: true }).click()
+    await openGeneration(page)
     await panel.getByText('Select saved materials', { exact: true }).click()
     await panel.getByRole('checkbox', { name: '渡口场景 · Scene', exact: true }).check()
     await panel.getByRole('textbox', { name: 'Writing instructions', exact: true }).fill('依据已采纳场景起草首章。')
@@ -59,6 +61,7 @@ await withWorkspace(output, async page => {
     assert.equal(JSON.parse(await readFile(join(output, 'generation-calls.json'), 'utf8')).length, 2)
   }
   await mkdir(join(output, 'screenshots'), { recursive: true })
+  await page.locator('#sn-tab-revisions').click()
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click()
   await page.setViewportSize({ width: 900, height: 800 })
   await panel.scrollIntoViewIfNeeded()

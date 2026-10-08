@@ -3,6 +3,34 @@ import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 
+/** Navigation failures must not print the preview's temporary credential. */
+export async function visitPreview(page, output) {
+  try { await page.goto(await readFile(join(output, 'preview-url'), 'utf8')) }
+  catch (error) { throw new Error(error.message.replace(/([?&]token=)[^\s&"'<>]+/g, '$1[redacted]')) }
+}
+
+/** Follow the visible navigation used by authors; do not fill collapsed forms. */
+export async function openBookCreator(page) {
+  if (!await page.getByLabel('Book title', { exact: true }).isVisible()) await page.locator('.sn-book-picker button').click()
+}
+
+export async function showContent(page) {
+  if (!await page.locator('#sn-tab-writing').getAttribute('aria-selected').then(value => value === 'true')) await page.locator('#sn-tab-writing').click()
+}
+
+export async function openGeneration(page) {
+  if (!await page.locator('#sn-tab-revisions').getAttribute('aria-selected').then(value => value === 'true')) await page.locator('#sn-tab-revisions').click()
+  await page.locator('.sn-proposals[data-loaded=true]').waitFor()
+  const settings = page.locator('.sn-generation')
+  if (!await settings.evaluate(element => element.open)) await settings.locator(':scope > summary').click()
+}
+
+export async function openDocumentOptions(page) {
+  await showContent(page)
+  const options = page.locator('.sn-document-options')
+  if (!await options.evaluate(element => element.open)) await options.locator(':scope > summary').click()
+}
+
 /** Shared setup for task-owned packed-plugin workflows. Never print the authenticated URL. */
 export async function withWorkspace(output, run) {
   const modulePath = process.env.PLAYWRIGHT_MODULE
@@ -17,7 +45,7 @@ export async function withWorkspace(output, run) {
     page.on('dialog', dialog => dialog.accept())
     await page.addInitScript(() => localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: 'super-novel-preview-a' })))
     for (const name of ['Continue', 'Configure later']) await page.addLocatorHandler(page.getByRole('button', { name, exact: true }), button => button.click())
-    await page.goto(await readFile(join(output, 'preview-url'), 'utf8'))
+    await visitPreview(page, output)
     await page.getByRole('button', { name: /^(Settings|设置)$/ }).waitFor()
     if (await page.getByRole('button', { name: '设置', exact: true }).isVisible()) {
       await page.getByRole('button', { name: '设置', exact: true }).click()

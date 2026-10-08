@@ -4,6 +4,7 @@ import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
+import { openBookCreator, visitPreview } from './browser-workspace.ts'
 const modulePath = process.env.PLAYWRIGHT_MODULE
 if (!modulePath) throw new Error('Provide the installed Playwright module path')
 const { chromium } = await import(pathToFileURL(resolve(modulePath)).href)
@@ -18,7 +19,7 @@ try {
   page.on('dialog', dialog => dialog.accept())
   await page.addInitScript(() => localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: 'super-novel-preview-a' })))
   for (const name of ['Continue', 'Configure later']) await page.addLocatorHandler(page.getByRole('button', { name, exact: true }), button => button.click())
-  await page.goto(await readFile(join(output, 'preview-url'), 'utf8'))
+  await visitPreview(page, output)
   await page.getByRole('button', { name: /^(Settings|设置)$/ }).waitFor()
   if (await page.getByRole('button', { name: '设置', exact: true }).isVisible()) {
     await page.getByRole('button', { name: '设置', exact: true }).click()
@@ -41,6 +42,7 @@ try {
   const saved = () => page.locator('.sn-editor-toolbar [role=status]').filter({ hasText: /^Saved$/ }).waitFor()
   const root = join(output, 'workspace')
   if (mode === 'workflow') {
+    await openBookCreator(page)
     await page.getByRole('textbox', { name: 'Book title', exact: true }).fill('历史渡河')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
     await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第一章')

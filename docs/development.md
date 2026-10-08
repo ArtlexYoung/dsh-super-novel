@@ -42,7 +42,7 @@ node --experimental-strip-types scripts/prepare-preview.ts .test-output/preview-
 node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v003
 ```
 
-准备脚本拒绝覆盖已有目录。使用已安装的 Playwright 路径运行 `scripts/browser-books.ts`，先验证创建和保存，再重启预览服务，以 `reopen` 参数验证磁盘恢复。运行方法与临时认证 URL 的处理见 [P0 技术验证](P0-VALIDATION.md#重现浏览器验证)；现用 URL 位于隔离预览目录。只终止本次启动的进程。
+准备脚本拒绝覆盖已有目录。等服务显示就绪，再使用已安装的 Playwright 路径运行 `scripts/browser-books.ts`，先验证创建和保存，再重启预览服务，以 `reopen` 参数验证磁盘恢复。共享导航会脱敏失败消息中的临时认证参数。运行方法与临时认证 URL 的处理见 [P0 技术验证](P0-VALIDATION.md#重现浏览器验证)；现用 URL 位于隔离预览目录。只终止本次启动的进程。
 
 固定响应候选界面的隔离验证：
 
@@ -59,7 +59,7 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 
 资料页直接生成用 `scripts/browser-material-generation.ts`，覆盖七类资料、默认名称与要求、资料和正文来源、采纳/拒绝、创建后失败重试、停止、切书隔离。停服重开后附加 `reopen`，确认资料和未完成候选保留，查询不调用模型。
 
-侧栏适配用 `scripts/browser-sidebar.ts`，覆盖七类混合资料、类型/关联章节/名称筛选、100 项分页、目录折叠、300/420px 拖动侧栏和 900px 全屏。它同时检查草稿、候选和采纳结果在缩放时保留；停服重启后附加 `reopen`，确认查询不会重新生成。该浏览器命令使用 Chromium，只验证 Web；桌面原生协议的补验范围见[评测说明](evaluation.md)。
+侧栏适配用 `scripts/browser-sidebar.ts`，覆盖七类混合资料、类型/关联章节/名称筛选、100 项分页、目录折叠、300/420px 拖动侧栏和 900px 全屏。它同时检查切页和缩放保留草稿、候选与采纳结果，以及 ⌘/Ctrl+S 保存；停服重启后附加 `reopen`，确认查询不会重新生成。共享辅助函数通过可见入口打开新建、AI 设置和文档选项。该浏览器命令使用 Chromium，只验证 Web；桌面原生协议的补验范围见[评测说明](evaluation.md)。
 
 事实工作流用 `scripts/browser-facts.ts` 验证提取、采纳、引用定位、下一章上下文及旧章变化后过期。固定响应只能证明流程，事实含义与连续写作质量仍需真实模型和人工评阅。
 

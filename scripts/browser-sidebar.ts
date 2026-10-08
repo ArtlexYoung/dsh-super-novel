@@ -3,7 +3,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { withWorkspace } from './browser-workspace.ts'
+import { withWorkspace, showContent, openGeneration, openDocumentOptions } from './browser-workspace.ts'
 
 /** A mixed directory exercises pagination and links without calling a provider. */
 export async function createSidebarFixture(output) {
@@ -25,7 +25,7 @@ export async function createSidebarFixture(output) {
   await add('专用事实', JSON.stringify({ schemaVersion: 1, sourceChapterId: proseId, sourceRevision: 1, sourceHash, facts: [], coverage: 'selection' }), 'facts', proseId)
   const voiceId = randomUUID()
   await add('专用授权', JSON.stringify({ schemaVersion: 1, voiceId, sourceChapterId: proseId, sourceRevision: 1, sourceHash, channel: 'narration', characterId: '', sourceDescription: '固定响应测试样本', sample: '渡口原文。', start: 0, end: 5, authorized: false, authorizedAt: 0 }), 'voice', '', voiceId)
-  await writeFile(join(folder, 'project.json'), JSON.stringify({ schemaVersion: 1, bookId, title: '侧栏素材管理 0.1.3', revision: 1, chapters }))
+  await writeFile(join(folder, 'project.json'), JSON.stringify({ schemaVersion: 1, bookId, title: '渡口 · 素材管理', revision: 1, chapters }))
   const identity = { bookId, proseId, secondId }
   await writeFile(join(output, 'sidebar-book.json'), JSON.stringify(identity))
   return identity
@@ -33,7 +33,7 @@ export async function createSidebarFixture(output) {
 
 /** The same controls run in Web and the native Electron custom-protocol page. */
 export async function checkSidebar(page, output, identity, resize = size => page.setViewportSize(size), mode = 'workflow') {
-  const directory = page.locator('.sn-directory'), content = page.locator('.sn-document'), materials = page.getByRole('textbox', { name: 'Material text', exact: true })
+  const directory = page.locator('.sn-directory'), content = page.locator('.sn-document'), materials = page.locator('textarea[aria-label="Material text"]')
   const tab = name => page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name, exact: true }).click()
   const creator = page.locator('.sn-material-creator'), panel = page.locator('.sn-proposals')
   const calls = async () => JSON.parse(await readFile(join(output, 'generation-calls.json'), 'utf8').catch(() => '[]')).length
@@ -98,7 +98,9 @@ export async function checkSidebar(page, output, identity, resize = size => page
   const directoryTop = await directory.evaluate(el => el.getBoundingClientRect().top)
   await content.evaluate(el => { el.scrollTop = el.scrollHeight })
   assert.equal(await directory.evaluate(el => el.getBoundingClientRect().top), directoryTop)
+  assert(await page.locator('.sn-work-tabs').evaluate(el => el.getBoundingClientRect().top >= el.closest('.sn-document').getBoundingClientRect().top))
   assert.equal(await materials.inputValue(), '缩放中保留的未保存素材草稿。')
+  await openDocumentOptions(page)
   await page.getByRole('button', { name: 'Read disk version', exact: true }).click()
   await page.waitForFunction(() => document.querySelector('textarea[aria-label="Material text"]')?.value === '已保存 scene 1。')
   if (mode === 'workflow') {
@@ -126,8 +128,20 @@ export async function checkSidebar(page, output, identity, resize = size => page
     await page.getByLabel('Search chapters or materials', { exact: true }).fill('侧栏新人物')
     await page.locator('.sn-chapters button').click(); await titleIs('侧栏新人物')
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Material text"]')?.value.includes('候选前句'))
+    await openGeneration(page)
     await panel.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Accepted$/ }).waitFor()
     assert.equal(await calls(), before)
+  }
+  await showContent(page)
+  if (mode === 'workflow') {
+    const accepted = await materials.inputValue()
+    await materials.fill(`${accepted}\n切页保留的草稿。`)
+    await openGeneration(page)
+    assert.equal(await materials.inputValue(), `${accepted}\n切页保留的草稿。`)
+    await showContent(page)
+    await materials.press('ControlOrMeta+s')
+    await page.locator('.sn-editor-toolbar [role=status]').filter({ hasText: /^Saved$/ }).waitFor()
+    assert.equal(await materials.inputValue(), `${accepted}\n切页保留的草稿。`)
   }
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click()
   await page.getByLabel('Filter material type', { exact: true }).selectOption('scene')

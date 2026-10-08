@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { withWorkspace } from './browser-workspace.ts'
+import { withWorkspace, openGeneration } from './browser-workspace.ts'
 const output = resolve(process.argv[2]), mode = process.argv[3] ?? 'workflow'
 const count = () => readFile(join(output, 'generation-calls.json'), 'utf8').then(text => JSON.parse(text).length, () => 0)
 const callsBefore = await count()
 await withWorkspace(output, async page => {
   const body = page.getByRole('textbox', { name: 'Chapter text', exact: true }), tabs = page.locator('.sn-work-tabs')
   const voices = page.locator('.sn-voices'), proposals = page.locator('.sn-proposals'), transfer = page.locator('.sn-transfer')
-  const tab = name => tabs.getByRole('tab', { name, exact: true }).click()
+  const tab = id => page.locator(`#sn-tab-${id}`).click()
   if (mode === 'workflow') {
     await transfer.getByText('Import and export', { exact: true }).click()
     await transfer.getByLabel('Markdown / TXT file', { exact: true }).setInputFiles({ name: '渡河.md', mimeType: 'text/markdown', buffer: Buffer.from('# 第一章\n风，风。慢一点。\n\n# 第二章\n她没有回头。\n') })
@@ -16,20 +16,20 @@ await withWorkspace(output, async page => {
     await transfer.getByRole('button', { name: 'Import as new book', exact: true }).click(); await body.waitFor()
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Chapter text"]')?.value.includes('风，风。慢一点。'))
     await body.click(); await page.keyboard.press('Meta+A')
-    await tab('References')
+    await tab('references')
     await voices.getByLabel('Sample source', { exact: true }).fill('作者自有开篇')
     await voices.getByRole('checkbox').check()
     await voices.getByRole('button', { name: 'Authorize selection', exact: true }).click()
-    await tab('References')
+    await tab('references')
     await voices.getByText(/Narration · Active/).waitFor()
-    await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click(); await tab('Revisions')
+    await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click(); await openGeneration(page)
     await proposals.getByText('Select authorized voices', { exact: true }).click()
     await proposals.getByRole('checkbox', { name: /作者自有开篇 · Narration · Active/ }).check()
     await proposals.getByLabel('Writing instructions', { exact: true }).fill('保留叙述声音，继续写。')
     await proposals.getByRole('button', { name: 'Generate', exact: true }).click()
     await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Ready for review$/ }).waitFor()
-    await tab('References'); await voices.getByRole('button', { name: 'Revoke authorization', exact: true }).click()
-    await voices.getByText(/Narration · Revoked/).waitFor(); await tab('Revisions')
+    await tab('references'); await voices.getByRole('button', { name: 'Revoke authorization', exact: true }).click()
+    await voices.getByText(/Narration · Revoked/).waitFor(); await tab('revisions')
     await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Expired$/ }).waitFor()
     assert(await proposals.getByRole('button', { name: 'Accept', exact: true }).isDisabled())
     const download = page.waitForEvent('download'); await transfer.getByRole('button', { name: 'Export', exact: true }).click()
@@ -41,16 +41,16 @@ await withWorkspace(output, async page => {
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Chapter text"]')?.value.includes('风，风。慢一点。'))
     assert.equal(await body.inputValue(), '# 第一章\n风，风。慢一点。\n\n')
     await page.getByLabel('Book', { exact: true }).selectOption({ label: '渡河' })
-    await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click(); await tab('Revisions')
-    await tabs.getByRole('tab', { name: 'Chapters', exact: true }).focus(); await page.keyboard.press('ArrowRight')
-    assert.equal(await tabs.getByRole('tab', { name: 'References', exact: true }).getAttribute('aria-selected'), 'true')
-    await tab('Revisions')
+    await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click(); await tab('revisions')
+    await page.locator('#sn-tab-writing').focus(); await page.keyboard.press('ArrowRight')
+    assert.equal(await page.locator('#sn-tab-revisions').getAttribute('aria-selected'), 'true')
+    await tab('revisions')
     assert.equal(await count() - callsBefore, 1)
   } else {
     await page.getByLabel('Book', { exact: true }).selectOption({ label: '渡河' })
     await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click()
-    await body.waitFor(); await tab('References'); await voices.getByText(/Narration · Revoked/).waitFor()
-    await tab('Revisions'); await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Expired$/ }).waitFor()
+    await body.waitFor(); await tab('references'); await voices.getByText(/Narration · Revoked/).waitFor()
+    await tab('revisions'); await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Expired$/ }).waitFor()
     assert.equal(await count(), callsBefore)
   }
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click(); await page.setViewportSize({ width: 900, height: 800 })

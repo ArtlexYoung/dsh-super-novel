@@ -1,42 +1,51 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { withWorkspace } from './browser-workspace.ts'
+import { withWorkspace, openBookCreator, showContent } from './browser-workspace.ts'
 const output = resolve(process.argv[2]), mode = process.argv[3] ?? 'workflow'
 const callsBefore = await readFile(join(output, 'generation-calls.json'), 'utf8').then(text => JSON.parse(text).length, () => 0)
 await withWorkspace(output, async page => {
-  const body = page.getByRole('textbox', { name: 'Chapter text', exact: true })
+  const body = page.locator('textarea[aria-label="Chapter text"]')
   const panel = page.locator('.sn-reviews'), proposals = page.locator('.sn-proposals')
   const saved = () => page.locator('.sn-editor-toolbar [role=status]').filter({ hasText: /^Saved$/ }).waitFor()
   if (mode === 'workflow') {
+    await openBookCreator(page)
     await page.getByRole('textbox', { name: 'Book title', exact: true }).fill('审校渡河')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
     await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第一章')
     await page.getByRole('button', { name: 'New chapter', exact: true }).click()
     await body.fill('前文保持。\n\n[TODO]\n\n后文保持。')
     await page.getByRole('button', { name: 'Save', exact: true }).click(); await saved()
+    await page.locator('#sn-tab-assessment').click()
     await panel.getByRole('button', { name: 'Run review', exact: true }).click()
     await panel.getByText(/Incomplete evidence ·/).waitFor()
     const issue = panel.locator('.sn-review-issue').filter({ hasText: '移除占位内容。' })
     await issue.getByRole('button', { name: 'Locate source', exact: true }).click()
     assert.equal(await body.evaluate(element => element.value.slice(element.selectionStart, element.selectionEnd)), '[TODO]')
+    await page.locator('#sn-tab-assessment').click()
     await issue.getByRole('button', { name: 'Generate local revision', exact: true }).click()
     await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Ready for review$/ }).waitFor()
     assert.equal(await body.inputValue(), '前文保持。\n\n[TODO]\n\n后文保持。')
     await proposals.getByRole('button', { name: 'Changes', exact: true }).click()
     assert.equal(await proposals.getByLabel('Original selection', { exact: true }).innerText(), '[TODO]')
+    await page.locator('#sn-tab-assessment').click()
     await panel.getByRole('button', { name: 'Run review', exact: true }).click()
     await panel.getByText(/Incomplete evidence ·/).waitFor()
     await page.waitForFunction(() => document.querySelector('.sn-reviews select[aria-label="Review records"]')?.options.length === 2)
     assert.equal(await panel.locator('.sn-review-issue').count(), 0)
+    await page.locator('#sn-tab-revisions').click()
     await proposals.getByRole('button', { name: 'Accept', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Chapter text"]')?.value.includes('左腕仍藏在袖中'))
+    await showContent(page)
     await saved()
     assert.equal(await body.inputValue(), '前文保持。\n\n候选前句。\n他用右手扶住船沿，左腕仍藏在袖中。\n\n\n后文保持。')
+    await page.locator('#sn-tab-assessment').click()
     await panel.getByText(/Review expired ·/).waitFor()
     assert.equal(JSON.parse(await readFile(join(output, 'generation-calls.json'), 'utf8')).length - callsBefore, 3)
   } else {
+    await showContent(page)
     await body.waitFor(); assert((await body.inputValue()).includes('左腕仍藏在袖中'))
+    await page.locator('#sn-tab-assessment').click()
     await panel.getByText(/Review expired ·/).waitFor()
     assert.equal(await readFile(join(output, 'generation-calls.json'), 'utf8').then(text => JSON.parse(text).length, () => 0), callsBefore)
   }

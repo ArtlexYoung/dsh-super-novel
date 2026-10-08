@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { withWorkspace } from './browser-workspace.ts'
+import { withWorkspace, openBookCreator, showContent, openGeneration, openDocumentOptions } from './browser-workspace.ts'
 
 const output = resolve(process.argv[2]), mode = process.argv[3] ?? 'workflow'
 const calls = async () => JSON.parse(await readFile(join(output, 'generation-calls.json'), 'utf8').catch(() => '[]'))
@@ -13,7 +13,7 @@ const text = (bookId, chapterId) => readFile(join(bookPath(bookId), 'chapters', 
 await withWorkspace(output, async page => {
   const creator = page.locator('.sn-material-creator'), panel = page.locator('.sn-proposals')
   const body = page.getByRole('textbox', { name: 'Chapter text', exact: true })
-  const material = page.getByRole('textbox', { name: 'Material text', exact: true })
+  const material = page.locator('textarea[aria-label="Material text"]')
   const tab = name => page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name, exact: true }).click()
   const openCreator = async () => { if (!await creator.evaluate(element => element.open)) await creator.locator(':scope > summary').click() }
   const openSources = async () => { const details = creator.locator('details'); if (!await details.evaluate(element => element.open)) await details.locator('summary').click() }
@@ -26,6 +26,7 @@ await withWorkspace(output, async page => {
   let identity
   if (mode === 'workflow') {
     const previousBook = await page.getByLabel('Book', { exact: true }).inputValue()
+    await openBookCreator(page)
     await page.getByRole('textbox', { name: 'Book title', exact: true }).fill('资料生成验收')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
     await page.waitForFunction(previous => document.querySelector('select[aria-label="Book"]')?.value !== previous, previousBook)
@@ -53,15 +54,18 @@ await withWorkspace(output, async page => {
       if (kind === 'seed') await creator.getByRole('button', { name: 'Generate material with AI', exact: true }).evaluate(button => { button.click(); button.click() })
       else await creator.getByRole('button', { name: 'Generate material with AI', exact: true }).click()
       await titleIs(name); await ready()
-      if (kind === 'seed') assert((await panel.getByLabel('Writing instructions', { exact: true }).inputValue()).includes('雨夜渡河'))
+      if (kind === 'seed') assert((await panel.locator('textarea[aria-label="Writing instructions"]').inputValue()).includes('雨夜渡河'))
       assert(await panel.isVisible())
-      assert.equal(await page.locator('.sn-work-tabs:visible').count(), 0)
+      assert.equal(await page.locator('.sn-work-tabs:visible').count(), 1)
+      assert.equal(await page.locator('#sn-tab-revisions').getAttribute('aria-selected'), 'true')
+      assert(!await page.locator('.sn-generation').evaluate(element => element.open))
       const target = (await snapshot(bookId)).chapters.at(-1); generatedIds.push(target.chapterId)
       assert.equal(target.kind, kind)
       if (kind === 'scene' || kind === 'chapter-outline') assert.equal(target.linkedChapterId, sourceId)
       assert.equal(await text(bookId, target.chapterId), '')
       assert.equal(await material.inputValue(), '')
       if (kind === 'character') {
+        await openGeneration(page)
         await panel.getByText('Organize from saved prose', { exact: true }).click()
         assert(await panel.getByRole('checkbox', { name: '已保存原文 · Chapter', exact: true }).isChecked())
       }
@@ -78,8 +82,11 @@ await withWorkspace(output, async page => {
     assert.equal(await text(bookId, sourceId), prose)
 
     // Unsaved editing cannot be overwritten by an inline candidate.
+    await showContent(page)
     await material.fill('本地未保存的资料草稿')
+    await openGeneration(page)
     assert(await panel.getByRole('button', { name: 'Generate', exact: true }).isDisabled())
+    await openDocumentOptions(page)
     await page.getByRole('button', { name: 'Read disk version', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Material text"]')?.value.includes('候选前句'))
 
@@ -109,6 +116,7 @@ await withWorkspace(output, async page => {
     assert.equal((await snapshot(bookId)).chapters.length, count)
     assert.equal((await calls()).length - initialCalls, 7)
     await creator.getByRole('button', { name: 'Create another material', exact: true }).click()
+    await openGeneration(page)
     await panel.getByRole('button', { name: 'Generate', exact: true }).click(); await ready()
     assert.equal(await text(bookId, failure.chapterId), '')
     await panel.getByRole('button', { name: 'Reject', exact: true }).click()
@@ -122,12 +130,14 @@ await withWorkspace(output, async page => {
     await creator.getByRole('button', { name: 'Generate material with AI', exact: true }).click(); await titleIs('可停止资料')
     await panel.getByRole('button', { name: 'Stop', exact: true }).waitFor()
     const stoppedId = (await snapshot(bookId)).chapters.at(-1).chapterId
+    await openBookCreator(page)
     await page.getByLabel('Book title', { exact: true }).fill('另一作品')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
     await page.waitForFunction(previous => document.querySelector('select[aria-label="Book"]')?.value !== previous, bookId)
     const otherId = await page.getByLabel('Book', { exact: true }).inputValue()
     await page.getByLabel('Book', { exact: true }).selectOption(bookId)
     await page.locator('.sn-chapters').getByRole('button', { name: /可停止资料 · World/ }).click()
+    await openGeneration(page)
     await panel.getByRole('button', { name: 'Stop', exact: true }).click()
     await panel.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Incomplete$/ }).waitFor()
     assert(await panel.getByRole('button', { name: 'Accept', exact: true }).isDisabled())
@@ -141,7 +151,9 @@ await withWorkspace(output, async page => {
     await page.getByLabel('Book', { exact: true }).selectOption(identity.bookId)
     await tab('Materials and plans')
     await page.locator('.sn-chapters').getByRole('button', { name: /可停止资料 · World/ }).click()
+    await page.locator('#sn-tab-revisions').click()
     await panel.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Incomplete$/ }).waitFor()
+    assert.equal(await panel.locator('textarea[aria-label="Writing instructions"]').inputValue(), '[slow]')
     assert.equal(await text(identity.bookId, identity.sourceId), identity.prose)
     for (const id of identity.generatedIds) assert((await text(identity.bookId, id)).includes('候选前句'))
     assert.equal(await text(identity.bookId, identity.failureId), '')

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { withWorkspace } from './browser-workspace.ts'
+import { withWorkspace, openBookCreator, openGeneration } from './browser-workspace.ts'
 const output = resolve(process.argv[2]), mode = process.argv[3] ?? 'workflow'
 const targetPath = join(output, 'workflow-book-id')
 const calls = () => readFile(join(output, 'generation-calls.json'), 'utf8').then(text => JSON.parse(text).length, () => 0)
@@ -10,13 +10,14 @@ await withWorkspace(output, async page => {
   const body = page.locator('textarea[aria-label="Chapter text"]'), tabs = page.locator('.sn-work-tabs')
   const material = page.getByRole('textbox', { name: 'Material text', exact: true })
   const proposals = page.locator('.sn-proposals'), reviews = page.locator('.sn-reviews'), facts = page.locator('.sn-facts')
-  const tab = name => tabs.getByRole('tab', { name, exact: true }).click()
+  const tab = id => page.locator(`#sn-tab-${id}`).click()
   const savedText = async text => {
     await body.fill(text); await page.getByRole('button', { name: 'Save', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('.sn-editor-toolbar [role=status]')?.textContent === 'Saved')
   }
   const ready = () => proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Ready for review$/ }).waitFor()
   if (mode === 'workflow') {
+    await openBookCreator(page)
     await page.getByLabel('Book title', { exact: true }).fill('完整渡河'); await page.getByRole('button', { name: 'New book', exact: true }).click()
     await page.getByLabel('Chapter title', { exact: true }).fill('第一章'); await page.getByRole('button', { name: 'New chapter', exact: true }).click(); await body.waitFor()
     const bookId = await page.getByLabel('Book', { exact: true }).inputValue()
@@ -27,17 +28,18 @@ await withWorkspace(output, async page => {
     await page.getByLabel('Material name', { exact: true }).fill('渡河章纲'); await page.getByRole('button', { name: 'Create template', exact: true }).click(); await material.waitFor()
     await material.fill('目的：渡河。主角左腕受伤，不能游泳。结尾停在船离岸时。'); await page.getByRole('button', { name: 'Save', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('.sn-editor-toolbar [role=status]')?.textContent === 'Saved')
+    await openGeneration(page)
     await proposals.getByLabel('Writing instructions', { exact: true }).fill('将要求写成可执行章纲。')
     await proposals.getByRole('button', { name: 'Generate', exact: true }).click(); await ready(); await proposals.getByRole('button', { name: 'Accept', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Material text"]')?.value.includes('候选前句'))
     await page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name: 'Chapters', exact: true }).click()
-    await tab('Revisions'); await proposals.getByText('Select saved materials', { exact: true }).click()
+    await openGeneration(page); await proposals.getByText('Select saved materials', { exact: true }).click()
     await proposals.getByRole('checkbox', { name: /渡河章纲 · Chapter outline/ }).check()
     await proposals.getByLabel('Writing instructions', { exact: true }).fill('依据章纲起草。[review-problem]')
     await proposals.getByRole('button', { name: 'Generate', exact: true }).click(); await ready()
     assert.equal(await body.inputValue(), '')
     const parentId = await proposals.getByLabel('Candidate history', { exact: true }).inputValue()
-    await tab('Review'); await reviews.getByLabel('Review target', { exact: true }).selectOption(parentId)
+    await tab('assessment'); await reviews.getByLabel('Review target', { exact: true }).selectOption(parentId)
     await reviews.getByRole('button', { name: 'Run review', exact: true }).click()
     await reviews.getByText(/Issues found ·/).waitFor()
     const issue = reviews.locator('.sn-review-issue').filter({ hasText: '移除占位内容。' })
@@ -47,18 +49,19 @@ await withWorkspace(output, async page => {
     assert.notEqual(await proposals.getByLabel('Candidate history', { exact: true }).inputValue(), parentId)
     await proposals.getByRole('button', { name: 'Changes', exact: true }).click()
     assert.equal(await proposals.getByLabel('Original selection', { exact: true }).innerText(), '[TODO]')
-    await tab('Review'); await reviews.getByRole('button', { name: 'Run review', exact: true }).click()
+    await tab('assessment'); await reviews.getByRole('button', { name: 'Run review', exact: true }).click()
     await reviews.getByText(/Checked, no issues found ·/).waitFor()
-    await tab('Revisions'); await proposals.getByRole('button', { name: 'Accept', exact: true }).click()
+    await tab('revisions'); await proposals.getByRole('button', { name: 'Accept', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Chapter text"]')?.value.includes('后文保持。') && !document.querySelector('textarea[aria-label="Chapter text"]')?.value.includes('[TODO]'))
-    await tab('References'); await facts.getByRole('button', { name: 'Extract fact candidate', exact: true }).click()
+    await tab('references'); await facts.getByRole('button', { name: 'Extract fact candidate', exact: true }).click()
     await facts.getByRole('button', { name: 'Accept facts', exact: true }).click(); await facts.getByText('Chapter facts accepted', { exact: true }).waitFor()
     await page.getByLabel('Chapter title', { exact: true }).fill('第二章'); await page.getByRole('button', { name: 'New chapter', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('input[aria-label="Rename"]')?.value === '第二章' && document.querySelector('textarea[aria-label="Chapter text"]')?.value === '')
-    await tab('Revisions')
+    await openGeneration(page)
     await proposals.getByRole('checkbox', { name: 'Use previous chapter facts', exact: true }).check(); await proposals.getByText(/Fact context complete/).waitFor()
     await proposals.getByLabel('Writing instructions', { exact: true }).fill('继续写下一章，遵守左腕约束。'); await proposals.getByRole('button', { name: 'Generate', exact: true }).click(); await ready()
     await proposals.getByRole('button', { name: 'Accept', exact: true }).click(); await page.waitForFunction(() => document.querySelector('textarea[aria-label="Chapter text"]')?.value.includes('左腕仍藏在袖中'))
+    await openGeneration(page)
     await proposals.getByLabel('Writing instructions', { exact: true }).fill('[slow]'); await proposals.getByRole('button', { name: 'Generate', exact: true }).click()
     await proposals.getByRole('button', { name: 'Stop', exact: true }).click(); await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Incomplete$/ }).waitFor()
     assert(await proposals.getByRole('button', { name: 'Accept', exact: true }).isDisabled())
@@ -66,8 +69,9 @@ await withWorkspace(output, async page => {
     await writeFile(targetPath, bookId)
   } else {
     await page.getByLabel('Book', { exact: true }).selectOption(await readFile(targetPath, 'utf8'))
-    await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click(); await tab('Chapters'); await body.waitFor(); assert((await body.inputValue()).includes('左腕仍藏在袖中'))
-    await tab('Revisions'); await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Incomplete$/ }).waitFor()
+    await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click(); await tab('writing'); await body.waitFor(); assert((await body.inputValue()).includes('左腕仍藏在袖中'))
+    await tab('revisions'); await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Incomplete$/ }).waitFor()
+    await openGeneration(page)
     await proposals.getByRole('checkbox', { name: 'Use previous chapter facts', exact: true }).check(); await proposals.getByText(/Fact context complete/).waitFor()
     assert.equal(await calls(), before)
   }
@@ -75,7 +79,7 @@ await withWorkspace(output, async page => {
     console.log(`PASS ${mode}: packed-plugin coexistence writing workflow; appearance checked separately.`)
     return
   }
-  await tab('Chapters')
+  await tab('writing')
   await page.getByRole('button', { name: 'Settings', exact: true }).click(); await page.getByRole('button', { name: 'Light', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click(); await page.setViewportSize({ width: 900, height: 800 })
   await tabs.scrollIntoViewIfNeeded(); await page.screenshot({ path: join(output, 'workflow-en-light.png') })

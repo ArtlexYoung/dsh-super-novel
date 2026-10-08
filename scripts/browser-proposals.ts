@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { openBookCreator, showContent, openGeneration, openDocumentOptions, visitPreview } from './browser-workspace.ts'
 const modulePath = process.env.PLAYWRIGHT_MODULE
 if (!modulePath) throw new Error('Provide the installed Playwright module path')
 const { chromium } = await import(pathToFileURL(resolve(modulePath)).href)
@@ -16,7 +17,7 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: 'super-novel-preview-a' })))
   for (const name of ['Continue', 'Configure later']) await page.addLocatorHandler(page.getByRole('button', { name, exact: true }), button => button.click())
-  await page.goto(await readFile(join(output, 'preview-url'), 'utf8'))
+  await visitPreview(page, output)
   await page.getByRole('button', { name: /^(Settings|设置)$/ }).waitFor()
   if (await page.getByRole('button', { name: '设置', exact: true }).isVisible()) {
     await page.getByRole('button', { name: '设置', exact: true }).click()
@@ -40,12 +41,14 @@ try {
   const disk = join(output, 'workspace/novels')
   const ready = () => panel.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Ready for review$/ }).waitFor()
   const generate = async (task, instruction) => {
+    await openGeneration(page)
     await panel.getByRole('combobox', { name: 'Writing task', exact: true }).selectOption(task)
     await panel.getByRole('textbox', { name: 'Writing instructions', exact: true }).fill(instruction)
     await panel.getByRole('button', { name: 'Generate', exact: true }).click()
   }
   const saved = () => page.locator('.sn-editor-toolbar [role=status]').filter({ hasText: /^Saved$/ }).waitFor()
   if (mode === 'workflow') {
+    await openBookCreator(page)
     await page.getByRole('textbox', { name: 'Book title', exact: true }).fill('渡河提案')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
     await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第一章')
@@ -70,6 +73,7 @@ try {
     await ready()
     const addition = await panel.getByLabel('Replacement text', { exact: true }).textContent()
     await panel.getByRole('button', { name: 'Accept', exact: true }).click()
+    await showContent(page)
     await saved()
     await body.waitFor()
     await page.waitForFunction(expected => document.querySelector('.sn-books textarea[aria-label="Chapter text"]')?.value === expected, original + addition)
@@ -92,7 +96,9 @@ try {
     await panel.getByRole('button', { name: 'Accept', exact: true }).click()
     await panel.getByRole('alert').waitFor()
     assert.equal(await readFile(path, 'utf8'), expected + '\n作者外部新稿。')
+    await openDocumentOptions(page)
     await page.getByRole('button', { name: 'Read disk version', exact: true }).click()
+    await page.waitForFunction(expected => document.querySelector('textarea[aria-label="Chapter text"]')?.value === expected, expected + '\n作者外部新稿。')
     await body.fill(expected)
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await saved()
@@ -113,9 +119,11 @@ try {
     assert.equal(calls.length, 7)
     await page.reload()
     await open()
+    await page.locator('#sn-tab-revisions').click()
     await panel.getByText('The output was truncated and cannot be accepted as complete.', { exact: true }).waitFor()
     assert.equal(JSON.parse(await readFile(join(output, 'generation-calls.json'), 'utf8')).length, 7)
   } else {
+    await page.locator('#sn-tab-revisions').click()
     await panel.getByRole('combobox', { name: 'Candidate history', exact: true }).waitFor()
     assert(await panel.getByRole('button', { name: 'Accept', exact: true }).isDisabled())
     assert.equal((await panel.getByRole('combobox', { name: 'Candidate history', exact: true }).locator('option').count()), 7)

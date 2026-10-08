@@ -4,6 +4,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
+import { openBookCreator, openDocumentOptions, visitPreview } from './browser-workspace.ts'
 const modulePath = process.env.PLAYWRIGHT_MODULE
 if (!modulePath) throw new Error('Provide the installed Playwright module path')
 const { chromium } = await import(pathToFileURL(resolve(modulePath)).href)
@@ -17,7 +18,7 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: 'super-novel-preview-a' })))
   for (const name of ['Continue', 'Configure later']) await page.addLocatorHandler(page.getByRole('button', { name, exact: true }), button => button.click())
-  await page.goto(await readFile(join(output, 'preview-url'), 'utf8'))
+  await visitPreview(page, output)
   await page.getByRole('button', { name: /^(Settings|设置)$/ }).waitFor()
   if (await page.getByRole('button', { name: '设置', exact: true }).isVisible()) {
     await page.getByRole('button', { name: '设置', exact: true }).click()
@@ -27,9 +28,10 @@ try {
   }
   const openPanel = async () => {
     const expand = page.getByRole('button', { name: 'Open right sidebar', exact: true })
-    if (await expand.isVisible()) await expand.click()
     const books = page.locator('.sn-books')
     const guide = page.getByText('Novel workspace', { exact: true })
+    await books.or(guide).or(expand).first().waitFor()
+    if (await expand.isVisible()) await expand.click()
     await books.or(guide).first().waitFor()
     if (!await books.isVisible()) await guide.click()
     await page.locator('.sn-books').waitFor()
@@ -39,6 +41,7 @@ try {
   const body = page.getByRole('textbox', { name: 'Chapter text', exact: true })
   const text = '雨落在渡口。\n\n他把受伤的左腕藏进袖口，右手握住船沿。\n'
   if (mode === 'create') {
+    await openBookCreator(page)
     await page.getByRole('textbox', { name: 'Book title', exact: true }).fill('雨夜渡河')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
     await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第一章 渡口')
@@ -63,9 +66,12 @@ try {
     await page.locator('.sn-editor-toolbar [role=status]').filter({ hasText: /^Saved$/ }).waitFor()
     await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第二章 离岸')
     await page.getByRole('button', { name: 'New chapter', exact: true }).click()
+    await page.waitForFunction(() => document.querySelector('input[aria-label="Rename"]')?.value === '第二章 离岸' && document.querySelector('textarea[aria-label="Chapter text"]')?.value === '')
+    await openDocumentOptions(page)
     await page.getByRole('button', { name: 'Move up', exact: true }).click()
     await page.getByRole('textbox', { name: 'Rename', exact: true }).fill('第二章 船离岸')
-    await page.getByRole('button', { name: 'Rename', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Rename', exact: true }).press('Enter')
+    await openDocumentOptions(page)
     await page.getByRole('button', { name: 'Move down', exact: true }).click()
     await page.getByRole('button', { name: '第一章 渡口' }).click()
     const file = join(disk, bookId, 'chapters', `${manifest.chapters[0].chapterId}.md`)
@@ -77,6 +83,7 @@ try {
     assert.equal(await readFile(file, 'utf8'), '外部作者修改。\n')
     assert((await body.inputValue()).includes('保留的本地改动。'))
     page.once('dialog', dialog => dialog.accept())
+    await openDocumentOptions(page)
     await page.getByRole('button', { name: 'Read disk version', exact: true }).click()
     await page.getByText('External edits detected.', { exact: false }).waitFor()
     await body.fill(text)
@@ -95,7 +102,7 @@ try {
     await page.getByText('This session is read-only.', { exact: false }).waitFor()
     assert.equal(await body.inputValue(), longText)
     assert.equal(await body.getAttribute('readonly'), '')
-    assert(await page.getByRole('button', { name: 'New book', exact: true }).isDisabled())
+    assert(await page.locator('.sn-book-picker button').isDisabled())
     assert(await page.getByRole('button', { name: 'New chapter', exact: true }).isDisabled())
     assert(await page.getByRole('button', { name: 'Save', exact: true }).isDisabled())
     await page.getByText('super-novel-preview-a', { exact: true }).first().click()

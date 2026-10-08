@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Select } from './controls.js'
-import { Button, IconCheckOutline16, IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCheckOutline16, IconCloseOutline16, IconSparkle16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { unwrap } from './books.js'
 import { materialInstruction, materialSources } from './materials.js'
 
@@ -11,7 +11,8 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
   const [proposalId, setProposalId] = useState('')
   const [view, setView] = useState(null)
   const [mode, setMode] = useState('draft')
-  const [instruction, setInstruction] = useState(() => planning ? materialInstruction(target.kind, t('templateLanguage')) : '')
+  const [instruction, setInstruction] = useState('')
+  const [generationOpen, setGenerationOpen] = useState(true)
   const [materials, setMaterials] = useState('')
   const [materialIds, setMaterialIds] = useState([])
   const [voices, setVoices] = useState([]), [voiceIds, setVoiceIds] = useState([])
@@ -27,12 +28,15 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
   const requestId = useRef({ key: '', id: '' })
   const mounted = useRef(true)
   const seededProposal = useRef('')
+  const generationTouched = useRef(false)
   const running = view?.state === 'generating' || items.some(item => item.state === 'generating')
+  useEffect(() => { if (loaded && view && !generationTouched.current) setGenerationOpen(false) }, [loaded])
   useEffect(() => { if (preferredProposal) { setProposalId(preferredProposal); setView(null) } }, [preferredProposal])
   useEffect(() => {
-    if (!preferredProposal || view?.proposalId !== preferredProposal || seededProposal.current === preferredProposal) return
-    seededProposal.current = preferredProposal
-    setMode(view.mode); setInstruction(view.instruction); setMaterials(view.materials)
+    if (!view || seededProposal.current === view.proposalId || (preferredProposal ? view.proposalId !== preferredProposal : seededProposal.current)) return
+    seededProposal.current = view.proposalId
+    setMode(view.mode); setInstruction(authorInstruction(view.instruction)); setMaterials(view.materials)
+    if (preferredProposal || !generationTouched.current) setGenerationOpen(false)
     setMaterialIds((view.context ?? []).map(item => item.chapterId))
   }, [preferredProposal, view])
   useEffect(() => {
@@ -85,12 +89,12 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
   const generate = () => action(async signal => {
     const selected = mode === 'rewrite' || mode === 'polish'
     const request = { bookId: book.bookId, chapterId, expectedRevision: book.revision, expectedHash: entry.diskHash,
-      mode, instruction, materials, start: selected ? selection.start : mode === 'continue' ? entry.diskContent.length : 0,
+      mode, instruction: planning ? `${materialInstruction(target.kind, t('templateLanguage'))}${instruction.trim() ? `\n\n${instruction.trim()}` : ''}` : instruction, materials, start: selected ? selection.start : mode === 'continue' ? entry.diskContent.length : 0,
       end: selected ? selection.end : entry.diskContent.length, ...(materialIds.length ? { materialIds } : {}), ...(voiceIds.length ? { voiceIds } : {}), ...(useFacts ? { useFacts, knowledgeScope } : {}) }
     const key = JSON.stringify(request)
     if (requestId.current.key !== key) requestId.current = { key, id: crypto.randomUUID() }
     const value = unwrap(await api.generateChapter(sessionId, { ...request, proposalId: requestId.current.id }, signal))
-    if (mounted.current) { setView(value); setProposalId(value.proposalId); requestId.current = { key: '', id: '' } }
+    if (mounted.current) { setView(value); setProposalId(value.proposalId); setGenerationOpen(false); requestId.current = { key: '', id: '' } }
   })
   const decide = accept => action(async signal => {
     const value = unwrap(await api[accept ? 'acceptProposal' : 'rejectProposal'](sessionId,
@@ -98,27 +102,37 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
     if (mounted.current) { setView(value); if (accept) adopted() }
   })
   const needsSelection = mode === 'rewrite' || mode === 'polish'
-  const canGenerate = loaded && writable && !busy && !dirty && entry && !entry.externallyModified && entry.bookRevision === book.revision && instruction.trim() &&
+  const authorInstruction = value => {
+    if (!planning) return value
+    for (const language of ['zh', 'en']) {
+      const template = materialInstruction(target.kind, language)
+      if (value.startsWith(template)) return value.slice(template.length).trimStart()
+    }
+    return value
+  }
+  const canGenerate = loaded && writable && !busy && !dirty && entry && !entry.externallyModified && entry.bookRevision === book.revision && (planning || instruction.trim()) &&
     (!needsSelection || selection.end > selection.start) && !running && (!useFacts || factState?.state === 'complete')
   const incomplete = view?.state === 'interrupted'
-  return <section className="sn-proposals" aria-label={t(planning ? 'materialCandidates' : 'proposals')}>
+  return <section className="sn-proposals" data-loaded={loaded} aria-label={t(planning ? 'materialCandidates' : 'proposals')}>
     <h3>{t(planning ? 'materialCandidates' : 'proposals')}</h3>
-    {planning && <p className="sn-notice">{t('materialCandidateHint')}</p>}
-    {view?.state === 'expired' && <Button size="sm" disabled={busy} onClick={() => { setMode(view.mode); setInstruction(view.instruction); setMaterials(view.materials); setMaterialIds((view.context ?? []).map(item => item.chapterId)) }}>{t('reuseRequirements')}</Button>}
+    <p className="sn-notice">{t('candidateHint')}</p>
+    {!loaded && <p role="status" className="sn-notice">{t('loading')}</p>}
+    {view?.state === 'expired' && <Button size="sm" disabled={busy} onClick={() => { setMode(view.mode); setInstruction(authorInstruction(view.instruction)); setMaterials(view.materials); setMaterialIds((view.context ?? []).map(item => item.chapterId)); setGenerationOpen(true) }}>{t('reuseRequirements')}</Button>}
     {error && <p role="alert" className="sn-alert">{t(error)}</p>}
-    <div className="sn-generation">
+    <details className="sn-generation" open={generationOpen} onToggle={event => setGenerationOpen(event.currentTarget.open)}>
+      <summary onClick={() => { generationTouched.current = true }}><IconSparkle16 />{t(view ? 'generateNew' : 'generateSettings')}</summary>
       <label className="sn-field">{t('generationMode')}<Select aria-label={t('generationMode')} value={mode} disabled={busy} onChange={event => setMode(event.target.value)}>
         {['draft', 'continue', 'rewrite', 'polish'].map(value => <option key={value} value={value}>{t(value)}</option>)}
       </Select></label>
-      {needsSelection && <p role="status">{t('selectedRange')} {selection.end - selection.start}</p>}
-      <label className="sn-field">{t('instruction')}<textarea className="sn-instruction" aria-label={t('instruction')} value={instruction} maxLength={16384} disabled={busy} onChange={event => setInstruction(event.target.value)} /></label>
+      {needsSelection && <p role="status">{selection.end > selection.start ? `${t('selectedRange')} ${selection.end - selection.start}` : t('selectionHint')}</p>}
+      <label className="sn-field">{t('instruction')}<textarea className="sn-instruction" aria-label={t('instruction')} placeholder={t(planning ? 'materialInstructionHint' : 'instructionHint')} value={instruction} maxLength={15000} disabled={busy} onChange={event => setInstruction(event.target.value)} /></label>
       <details><summary>{t('materials')}</summary><textarea className="sn-materials" aria-label={t('materials')} value={materials} maxLength={65536} disabled={busy} onChange={event => setMaterials(event.target.value)} /></details>
-      <details><summary>{t('selectMaterials')}</summary><div className="sn-material-list">{materialSources(book, chapterId).map(item => <label key={item.chapterId}><input type="checkbox" checked={materialIds.includes(item.chapterId)} disabled={busy} onChange={event => setMaterialIds(previous => event.target.checked ? [...previous, item.chapterId] : previous.filter(id => id !== item.chapterId))} /><span>{item.title} · {t(item.kind)}</span></label>)}</div></details>
+      <details><summary><span>{t('selectMaterials')}</span>{!!materialIds.length && <span className="sn-source-count">{materialIds.length}</span>}</summary><div className="sn-material-list">{materialSources(book, chapterId).map(item => <label key={item.chapterId}><input type="checkbox" checked={materialIds.includes(item.chapterId)} disabled={busy} onChange={event => setMaterialIds(previous => event.target.checked ? [...previous, item.chapterId] : previous.filter(id => id !== item.chapterId))} /><span>{item.title} · {t(item.kind)}</span></label>)}</div></details>
       {planning && <details><summary>{t('savedProseSources')}</summary><p className="sn-notice">{t('materialSourcesHint')}</p><div className="sn-material-list">{materialSources(book, chapterId, true).filter(item => !item.kind || item.kind === 'chapter').map(item => <label key={item.chapterId}><input type="checkbox" checked={materialIds.includes(item.chapterId)} disabled={busy} onChange={event => setMaterialIds(previous => event.target.checked ? [...previous, item.chapterId] : previous.filter(id => id !== item.chapterId))} /><span>{item.title} · {t('chapter')}</span></label>)}</div></details>}
       <details><summary>{t('selectVoices')}</summary><div className="sn-material-list">{voices.map(item => <label key={item.voiceId}><input type="checkbox" checked={voiceIds.includes(item.voiceId)} disabled={busy || item.state !== 'active'} onChange={event => setVoiceIds(previous => event.target.checked ? [...previous, item.voiceId] : previous.filter(id => id !== item.voiceId))} /><span>{item.sourceDescription} · {t(item.channel)} · {t(`voice-${item.state}`)}</span></label>)}</div></details>
       {(!target?.kind || target.kind === 'chapter') && <div className="sn-fact-settings"><label><input type="checkbox" checked={useFacts} onChange={event => setUseFacts(event.target.checked)} />{t('useFacts')}</label>{useFacts && <><label className="sn-field">{t('knowledgeScope')}<Select aria-label={t('contextScope')} value={knowledgeScope} onChange={event => setKnowledgeScope(event.target.value)}><option value="reader">{t('reader')}</option>{book.chapters.filter(item => item.kind === 'character').map(item => <option key={item.chapterId} value={item.chapterId}>{item.title}</option>)}</Select></label><p role="status">{t(`context-${factState?.state ?? 'loading'}`)}{factState ? ` · ${factState.bytes} B` : ''}</p></>}</div>}
       <div className="sn-row"><Button variant="primary" size="sm" disabled={!canGenerate} onClick={generate}>{t('generate')}</Button>{dirty && <span className="sn-notice">{t('saveFirst')}</span>}</div>
-    </div>
+    </details>
     {!!items.length && <label className="sn-field">{t('candidateHistory')}<Select aria-label={t('candidateHistory')} value={proposalId} onChange={event => { setProposalId(event.target.value); setView(null) }}>
       {items.map(item => <option key={item.proposalId} value={item.proposalId}>{t(item.mode)} · {t(item.state)} · {new Date(item.createdAt).toLocaleString()}</option>)}
     </Select></label>}
