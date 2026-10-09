@@ -6,7 +6,7 @@ DeepSeek Harness 的小说写作插件，提供本地作品、章节编辑和右
 
 在聊天中规划故事、起草章节、续写或润色。预设会提醒模型关注人物动机、情节连续性、作者文风和修改范围；模型、权限和工具沿用 Harness 的配置。
 
-当前 `0.1.6` 是本地写作流程测试版，支持作品、章节、故事资料、文风授权、导入导出、起草、续写、选段改写和润色。生成结果单独保存为候选；作者查看改动并采纳后，才更新正式正文或资料。保存检查版本和正文哈希，发生外部冲突时保留原稿。
+当前 `0.1.7` 是本地写作流程测试版，支持作品、章节、故事资料、文风授权、导入导出、起草、续写、选段改写和润色。生成结果单独保存为候选；作者查看改动并采纳后，才更新正式正文或资料。保存检查版本和正文哈希，发生外部冲突时保留原稿。
 
 工作台沿用 DSH 的组件和主题。窄侧栏以正文为主，底部提供「写作、目录、资料、助手、更多」。目录和工具一次展开一个，关闭后回到原光标和滚动位置。资料先只读查看，点击「编辑这份资料」才切换文档；保存位置、导入导出和历史放在「更多」。支持 ⌘/Ctrl+S，草稿与正式保存状态始终可见。
 
@@ -26,7 +26,7 @@ DeepSeek Harness 的小说写作插件，提供本地作品、章节编辑和右
 取得本地安装包后，在目标 profile 中安装（将路径替换为实际绝对路径）：
 
 ```sh
-dsh plugin --profile web add /absolute/path/dsh-super-novel-0.1.6.tgz
+dsh plugin --profile web add /absolute/path/dsh-super-novel-0.1.7.tgz
 ```
 
 DSH NEXT 可从「插件」→「添加插件」填入安装包的绝对路径。安装到实际使用的 profile，完成后按宿主提示重新加载。从源码生成安装包见[开发说明](docs/development.md)。市场收录与 npm 发布是独立流程，本说明不代表当前版本已上架。
@@ -54,7 +54,7 @@ DSH NEXT 可从「插件」→「添加插件」填入安装包的绝对路径�
 
 [![窄侧栏写作](docs/screenshots/writing-sidebar-zh-dark.png)](docs/screenshots/writing-sidebar-zh-dark.png)
 
-截图来自 `0.1.6` 实际安装包，使用合成稿件。300px 侧栏只保留作品名、章节名、保存条、正文和底部入口。
+截图来自 `0.1.7` 实际安装包，使用合成稿件。300px 侧栏只保留作品名、章节名、保存条、正文和底部入口。
 
 [![只读参考资料](docs/screenshots/writing-references-zh-dark.png)](docs/screenshots/writing-references-zh-dark.png)
 
@@ -86,3 +86,5 @@ DSH NEXT 可从「插件」→「添加插件」填入安装包的绝对路径�
 - [当前架构](docs/architecture.md)
 
 许可证：[Apache-2.0](LICENSE)。代码仓库：[ArtlexYoung/dsh-super-novel](https://github.com/ArtlexYoung/dsh-super-novel)。
+
+整书备份：在「更多 → 整书备份与恢复」中备份、核验和恢复。备份包含正文、资料、磁盘草稿、候选与历史，写作期间每 15 分钟尝试备份，目录可修改和打开。恢复生成新目录，原作品保留；跨库记录保留来源身份。备份使用可独立解包的 tar.gz，不上传作品，默认不清理副本。

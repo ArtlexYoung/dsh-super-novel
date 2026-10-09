@@ -11,6 +11,9 @@ import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookReque
 import { storageResult, workspaceBooks, workspaceAccess } from './host/workspace-books.js'
 import { StorageLocations, inside, libraryPath } from './host/storage-location.js'
 import { BookError, hash } from './domain/books.js'
+import { BackupStore } from './host/backup-store.js'
+import type { BackupSettings, BackupSummary, BackupPreview, BackupHealth, BackupQuery, BackupConfiguration, RestoreBackupRequest } from './types.js'
+import { randomUUID } from 'node:crypto'
 import { DraftStore } from './host/draft-store.js'
 import { BookFiles } from './host/book-files.js'
 import type { StorageLocation, ChangeStorageLocationRequest, PickStorageLocation, DraftQuery, DraftRequest, DraftSummary, DraftVersionQuery, DiskDraft, SettleDraftRequest, DraftListing } from './types.js'
@@ -46,6 +49,8 @@ export class SuperNovel extends TypertRemoteService {
   static inject = ['agentPresets']
   private readonly installer: ReturnType<typeof createPresetSetup>
   private readonly tasks = new ProposalTasks()
+  private readonly backupTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly backupJobs = new Set<Promise<void>>()
   private readonly lifetime = new AbortController()
   private readonly extractions = new Map<string, Promise<FactProposal>>()
   private readonly reviews = new Map<string, Promise<ReviewView>>()
@@ -55,7 +60,9 @@ export class SuperNovel extends TypertRemoteService {
     this.installer = createPresetSetup(ctx, ctx.agentPresets, fileURLToPath(new URL('../presets/dsh-super-novel/', import.meta.url)), JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version)
     ctx.effect(() => async () => {
       this.lifetime.abort()
-      await Promise.allSettled([this.tasks.dispose(), ...this.extractions.values(), ...this.reviews.values()])
+      for (const timer of this.backupTimers.values()) clearTimeout(timer)
+      this.backupTimers.clear()
+      await Promise.allSettled([this.tasks.dispose(), ...this.extractions.values(), ...this.reviews.values(), ...this.backupJobs])
     })
   }
 
@@ -148,12 +155,118 @@ export class SuperNovel extends TypertRemoteService {
     })
   }
 
+  private scheduleBackup(root: string, bookId: string, sessionId: string): void {
+    const key = `${root}:${bookId}`
+    if (this.backupTimers.has(key) || this.lifetime.signal.aborted) return
+    const timer = setTimeout(() => {
+      this.backupTimers.delete(key)
+      const job = (async () => {
+        const scope = await workspaceBooks(this.ctx, sessionId, true, this.lifetime.signal)
+        if (scope.root !== root) return
+        const backups = await BackupStore.at(root), settings = await backups.settings()
+        await (await StorageLocations.at(scope.defaultRoot)).validate(settings.root, scope.mode)
+        if (settings.automatic) await backups.create(bookId, randomUUID(), this.lifetime.signal)
+      })().catch(() => { /* A failed attempt never updates the verified backup list. */ }).finally(() => this.backupJobs.delete(job))
+      this.backupJobs.add(job)
+    }, 15 * 60 * 1000)
+    timer.unref(); this.backupTimers.set(key, timer)
+  }
+
+  private async backupScope(sessionId: string, workspaceId: string, writing: boolean, signal: AbortSignal) {
+    const scope = await workspaceBooks(this.ctx, sessionId, writing, signal)
+    if (scope.workspaceId !== workspaceId) throw new BookError('location-changed')
+    return scope
+  }
+
+  @Remote
+  async backupSettings(sessionId: string, workspaceId: string, signal: AbortSignal): Promise<BackupSettings> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, workspaceId, false, signal)
+      return await (await BackupStore.at(scope.root)).settings()
+    })
+  }
+
+  @Remote
+  async configureBackups(sessionId: string, request: BackupConfiguration, signal: AbortSignal): Promise<BackupSettings> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      await (await StorageLocations.at(scope.defaultRoot)).validate(request.root, scope.mode)
+      return await (await BackupStore.at(scope.root)).configure(request.root, request.automatic, 'danger-full-access')
+    })
+  }
+
+  @Remote
+  async backupHealth(sessionId: string, workspaceId: string, bookId: string, signal: AbortSignal): Promise<BackupHealth> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, workspaceId, false, signal)
+      return await (await BackupStore.at(scope.root)).health(bookId)
+    })
+  }
+
+  @Remote
+  async backupCatalog(sessionId: string, workspaceId: string, signal: AbortSignal): Promise<BackupSummary[]> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, workspaceId, false, signal)
+      return await (await BackupStore.at(scope.root)).catalog()
+    })
+  }
+
+  @Remote
+  async bookBackups(sessionId: string, workspaceId: string, bookId: string, signal: AbortSignal): Promise<BackupSummary[]> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, workspaceId, false, signal)
+      return await (await BackupStore.at(scope.root)).list(bookId)
+    })
+  }
+
+  @Remote
+  async createBackup(sessionId: string, query: BackupQuery, signal: AbortSignal): Promise<BackupSummary> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, query.workspaceId, true, signal)
+      const backups = await BackupStore.at(scope.root)
+      await (await StorageLocations.at(scope.defaultRoot)).validate((await backups.settings()).root, scope.mode)
+      return await backups.create(query.bookId, query.backupId, signal)
+    })
+  }
+
+  @Remote
+  async inspectBackup(sessionId: string, query: BackupQuery, signal: AbortSignal): Promise<BackupPreview> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, query.workspaceId, false, signal)
+      return await (await BackupStore.at(scope.root)).inspect(query.bookId, query.backupId, signal)
+    })
+  }
+
+  @Remote
+  async restoreBackup(sessionId: string, request: RestoreBackupRequest, signal: AbortSignal): Promise<{ root: string; bookId: string }> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      return await (await BackupStore.at(scope.root)).restore(request.bookId, request.backupId, request.manifestHash, signal)
+    })
+  }
+
+  @Remote
+  async openBackupLocation(sessionId: string, workspaceId: string, signal: AbortSignal): Promise<{ opened: boolean }> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, workspaceId, false, signal)
+      const settings = await (await BackupStore.at(scope.root)).settings(), files = await BookFiles.at(settings.root)
+      let path = settings.path
+      try { if (!(await lstat(await files.path('.super-novel-backups'))).isDirectory()) throw new BookError('unsafe-path') }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') path = files.root; else throw error }
+      const controller = this.ctx.get('sessionController')
+      if (!controller?.workspaceDesktop().available) throw new BookError('native-open-unavailable')
+      return await controller.openWorkspacePath({ path }, signal)
+    })
+  }
+
   /** Checkpoints are independent from formal chapter revisions and AI adoption. */
   @Remote
   async checkpointDraft(sessionId: string, request: DraftRequest, signal: AbortSignal): Promise<DraftSummary> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await (await DraftStore.at(scope.root, scope.workspaceId, scope.store)).put(request, signal)
+      const result = await (await DraftStore.at(scope.root, scope.workspaceId, scope.store)).put(request, signal)
+      this.scheduleBackup(scope.root, request.bookId, sessionId)
+      return result
     })
   }
 
@@ -202,7 +315,9 @@ export class SuperNovel extends TypertRemoteService {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
       if (request.workspaceId && scope.workspaceId !== request.workspaceId) throw new BookError('location-changed')
-      return await scope.store.mutate(request, signal)
+      const result = await scope.store.mutate(request, signal)
+      this.scheduleBackup(scope.root, request.bookId, sessionId)
+      return result
     })
   }
 

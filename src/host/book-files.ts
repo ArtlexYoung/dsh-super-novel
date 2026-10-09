@@ -1,11 +1,14 @@
 import { constants } from 'node:fs'
 import { lstat, mkdir, open, realpath, rename, rm, rmdir } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { BookError } from '../domain/books.js'
 import { publishFile, syncDirectory } from './file-publication.js'
 
 export interface FileState { readonly exists: boolean; readonly text: string }
+
+const active = new AsyncLocalStorage<ReadonlySet<string>>()
 
 /** Local-only storage. Every managed component is checked before opening it. */
 export class BookFiles {
@@ -35,6 +38,9 @@ export class BookFiles {
   }
 
   async directory(name: string, exclusive = false): Promise<void> {
+    await this.guard(name, async () => { await this.makeDirectory(name, exclusive) })
+  }
+  private async makeDirectory(name: string, exclusive: boolean): Promise<void> {
     const path = await this.path(name)
     await mkdir(path, { recursive: !exclusive, mode: 0o700 })
     await this.path(name)
@@ -69,6 +75,9 @@ export class BookFiles {
   }
 
   async remove(name: string, before: FileState): Promise<void> {
+    await this.guard(name, async () => { await this.removeFile(name, before) })
+  }
+  private async removeFile(name: string, before: FileState): Promise<void> {
     const current = await this.read(name, 32 * 1024 * 1024)
     if (current.exists !== before.exists || current.text !== before.text) throw new BookError('revision-conflict')
     const path = await this.path(name)
@@ -78,6 +87,9 @@ export class BookFiles {
 
   /** Check immediately before publication; a journal retains both versions. */
   async replace(name: string, text: string, before: FileState): Promise<void> {
+    await this.guard(name, async () => { await this.replaceFile(name, text, before) })
+  }
+  private async replaceFile(name: string, text: string, before: FileState): Promise<void> {
     const path = await this.path(name)
     const temporary = `${path}.tmp-${randomUUID()}`
     const handle = await open(temporary, 'wx', 0o600)
@@ -95,6 +107,24 @@ export class BookFiles {
   }
 
   async lock<T>(name: string, operation: () => Promise<T>): Promise<T> {
+    return await this.guard(name, async () => await this.acquire(name, operation))
+  }
+
+  /** All managed writers share this barrier; compression runs after releasing it. */
+  async freeze<T>(bookId: string, operation: () => Promise<T>): Promise<T> {
+    return await this.guard(`novels/${bookId}/project.json`, operation)
+  }
+
+  private async guard<T>(name: string, operation: () => Promise<T>): Promise<T> {
+    const match = /^novels[/\\](?:imports[/\\]\.?)?([a-f0-9-]{36})(?:[/\\]|\.(?:creation\.json|json|lock)$|$)/i.exec(name)
+    if (!match) return await operation()
+    const key = `${this.root}:${match[1]}`, inherited = active.getStore() ?? new Set<string>()
+    if (inherited.has(key)) return await operation()
+    return await this.acquire(`novels/.${match[1]}.snapshot.lock`, async () =>
+      await active.run(new Set([...inherited, key]), operation))
+  }
+
+  private async acquire<T>(name: string, operation: () => Promise<T>): Promise<T> {
     const path = await this.path(name)
     try { await mkdir(path, { mode: 0o700 }) }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new BookError('busy'); throw error }

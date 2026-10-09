@@ -324,3 +324,19 @@ export interface ReviewView {
   readonly elapsedMs: number
   readonly usage: GenerationUsage
 }
+
+export interface BackupSettings { readonly root: string; readonly path: string; readonly automatic: boolean; readonly intervalMinutes: number }
+export interface BackupSummary {
+  readonly backupId: string; readonly bookId: string; readonly title: string; readonly revision: number
+  readonly createdAt: number; readonly verifiedAt: number; readonly bytes: number; readonly fileCount: number
+  readonly recoveryRequired: boolean; readonly path: string
+}
+export interface BackupPreview {
+  readonly summary: BackupSummary; readonly sourceWorkspaceId: string; readonly foreign: boolean
+  readonly manifestHash: string; readonly files: readonly string[]
+}
+export interface BackupQuery { readonly workspaceId: string; readonly bookId: string; readonly backupId: string }
+export interface BackupConfiguration { readonly workspaceId: string; readonly root: string; readonly automatic: boolean }
+export interface RestoreBackupRequest extends BackupQuery { readonly manifestHash: string }
+
+export interface BackupHealth { readonly state: 'none' | 'verified' | 'failed'; readonly attemptedAt: number; readonly reason: string }

@@ -9,6 +9,7 @@ import { Reviews } from './reviews.js'
 import { Voices } from './voices.js'
 import { Transfer } from './transfer.js'
 import { DocumentDirectory } from './document-directory.js'
+import { Backups } from './backups.js'
 import { StorageSettings } from './storage-location.js'
 import { DraftRecovery } from './draft-recovery.js'
 import { draftKey, editorBranch, readCachedDrafts, writeCachedDraft, forgetCachedDraft } from './draft-cache.js'
@@ -340,6 +341,7 @@ export function Books({ api, sessionId, t, setup }) {
       {book?.recoveryRequired && <InterruptedRecovery key={bookId} api={api} sessionId={sessionId} bookId={bookId} writable={library.writable && !busy} t={t} saved={applyBook} />}
     </>}
     <StorageSettings api={api} sessionId={sessionId} revision={refresh} writable={!busy} t={t} beforeSwitch={flushDraft} switching={setReadingDisk} switched={() => { setEntry(null); setLibrary(null); setBookId(''); setChapterId(''); setRefresh(value => value + 1) }} />
+    {library && <Backups key={`backup:${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} writable={library.writable && !busy} t={t} beforeBackup={flushDraft} restored={() => setRefresh(value => value + 1)} />}
     {currentChapter && !planning && <div className="sn-more-tools"><Button size="sm" id="sn-tab-references" onClick={() => showTool('references')}>{t('tab-references')}</Button><Button size="sm" id="sn-tab-assessment" onClick={() => showTool('assessment')}>{t('tab-assessment')}</Button></div>}
     {currentChapter && <section className="sn-document-management"><h3>{currentChapter.title}</h3>
           <details className="sn-document-options" open={documentOptionsOpen} onToggle={event => setDocumentOptionsOpen(event.currentTarget.open)}><summary>{t('documentOptions')}</summary><div className="sn-row sn-recovery-actions"><Button size="sm" disabled={!entry || busy || readingDisk} onClick={readDisk}>{t('reloadDisk')}</Button><Button size="sm" disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</Button>
