@@ -107,6 +107,18 @@ export async function checkWritingLayout(page, output, identity, resize = size =
         if (await panel.locator('.sn-reference-back').isVisible()) await panel.locator('.sn-reference-back').click()
         await panel.locator('.sn-reference-list button').first().click()
         await panel.locator('.sn-reference-text').waitFor()
+        if (width === 300) {
+          await panel.getByRole('button', { name: 'Pin reference', exact: true }).click()
+          await panel.locator('.sn-reference-back').click()
+          await panel.getByRole('button', { name: 'Pinned', exact: true }).click()
+          assert(await panel.locator('.sn-reference-list button').count() > 0)
+          await panel.getByRole('button', { name: 'Recent', exact: true }).click()
+          assert(await panel.locator('.sn-reference-list button').count() > 0)
+          await panel.getByRole('button', { name: 'All', exact: true }).click()
+          await panel.locator('.sn-reference-list button').first().click()
+          await panel.locator('.sn-reference-text').waitFor()
+        }
+
         assert.equal(await body.inputValue(), manuscript)
         assert.equal(await body.getAttribute('data-chapter-id'), identity.proseId)
         if (width === 300) await page.screenshot({ path: join(output, 'references-300-en.png') })

@@ -4,7 +4,7 @@ import { Button, IconCheckOutline16, IconCloseOutline16, IconSparkle16 } from '.
 import { unwrap } from './books.js'
 import { materialInstruction, materialSources } from './materials.js'
 
-export function Proposals({ api, sessionId, book, chapterId, entry, writable, dirty, selection, t, revisionHint, preferredProposal, adopted }) {
+export function Proposals({ api, sessionId, book, chapterId, entry, writable, dirty, selection, t, revisionHint, preferredProposal, writingAction, adopted }) {
   const target = book.chapters.find(item => item.chapterId === chapterId)
   const planning = target?.kind && target.kind !== 'chapter'
   const [items, setItems] = useState([])
@@ -31,12 +31,13 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
   const generationTouched = useRef(false)
   const running = view?.state === 'generating' || items.some(item => item.state === 'generating')
   useEffect(() => { if (loaded && view && !generationTouched.current) setGenerationOpen(false) }, [loaded])
+  useEffect(() => { if (writingAction?.chapterId === chapterId) { setMode(writingAction.mode); setGenerationOpen(true); generationTouched.current = true; setInstruction(writingAction.instruction); requestId.current = { key: '', id: '' } } }, [writingAction?.id])
   useEffect(() => { if (preferredProposal) { setProposalId(preferredProposal); setView(null) } }, [preferredProposal])
   useEffect(() => {
-    if (!view || seededProposal.current === view.proposalId || (preferredProposal ? view.proposalId !== preferredProposal : seededProposal.current)) return
+    if (writingAction?.chapterId === chapterId || !view || seededProposal.current === view.proposalId || (preferredProposal ? view.proposalId !== preferredProposal : seededProposal.current)) return
     seededProposal.current = view.proposalId
     setMode(view.mode); setInstruction(authorInstruction(view.instruction)); setMaterials(view.materials)
-    if (preferredProposal || !generationTouched.current) setGenerationOpen(false)
+    if (!generationTouched.current) setGenerationOpen(false)
     setMaterialIds((view.context ?? []).map(item => item.chapterId))
   }, [preferredProposal, view])
   useEffect(() => {
