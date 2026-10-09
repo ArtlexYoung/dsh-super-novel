@@ -11,6 +11,7 @@ import { Transfer } from './transfer.js'
 import { DocumentDirectory } from './document-directory.js'
 import { materialKinds } from './materials.js'
 import { WritingPreferences, useWritingPreferences } from './writing-preferences.js'
+import { StoryStatePanel } from './story-state.js'
 import { ChapterIntent } from './chapter-intent.js'
 import { MaterialLibrary } from './material-library.js'
 import { Backups } from './backups.js'
@@ -93,10 +94,13 @@ export function Books({ api, sessionId, t, setup }) {
   const planning = currentChapter?.kind && currentChapter.kind !== 'chapter'
   const activeTab = planning && !['writing', 'revisions'].includes(workTab) ? 'writing' : workTab
   const managementOpen = pane === 'management'
-  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'selection-material', 'selection-ai', 'intent'].includes(pane) || compact && pane === 'directory'
+  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'selection-material', 'selection-ai', 'intent', 'story-state'].includes(pane) || compact && pane === 'directory'
   const capturePosition = () => {
     if (!editor.current || !entry) return
-    positions.current.set(documentIdentity, { start: editor.current.selectionStart, end: editor.current.selectionEnd, direction: editor.current.selectionDirection, scroll: editor.current.scrollTop })
+    const { selectionStart: start, selectionEnd: end, selectionDirection: direction, scrollTop: scroll } = editor.current
+    positions.current.set(documentIdentity, { start, end, direction, scroll })
+    // Safari accessibility and shortcut selections can miss React's select event.
+    setSelection(previous => previous.start === start && previous.end === end ? previous : { start, end })
   }
   const restorePosition = focus => {
     const position = positions.current.get(documentIdentity), element = editor.current
@@ -356,7 +360,7 @@ export function Books({ api, sessionId, t, setup }) {
     <StorageSettings api={api} sessionId={sessionId} revision={refresh} writable={!busy} t={t} beforeSwitch={flushDraft} switching={setReadingDisk} switched={() => { setEntry(null); setLibrary(null); setBookId(''); setChapterId(''); setRefresh(value => value + 1) }} />
     {library && <Backups key={`backup:${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} writable={library.writable && !busy} t={t} beforeBackup={flushDraft} restored={() => setRefresh(value => value + 1)} />}
     {book && <Button size="sm" onClick={manageMaterials}>{t('materialLibrary')}</Button>}
-    {currentChapter && !planning && <div className="sn-more-tools"><Button size="sm" onClick={() => openPane('intent')}>{t('chapterIntent')}</Button><Button size="sm" id="sn-tab-references" onClick={() => showTool('references')}>{t('tab-references')}</Button><Button size="sm" id="sn-tab-assessment" onClick={() => showTool('assessment')}>{t('tab-assessment')}</Button></div>}
+    {currentChapter && !planning && <div className="sn-more-tools"><Button size="sm" onClick={() => openPane('story-state')}>{t('storyState')}</Button><Button size="sm" onClick={() => openPane('intent')}>{t('chapterIntent')}</Button><Button size="sm" id="sn-tab-references" onClick={() => showTool('references')}>{t('tab-references')}</Button><Button size="sm" id="sn-tab-assessment" onClick={() => showTool('assessment')}>{t('tab-assessment')}</Button></div>}
     {currentChapter && <section className="sn-document-management"><h3>{currentChapter.title}</h3>
           <details className="sn-document-options" open={documentOptionsOpen} onToggle={event => setDocumentOptionsOpen(event.currentTarget.open)}><summary>{t('documentOptions')}</summary><div className="sn-row sn-recovery-actions"><Button size="sm" disabled={!entry || busy || readingDisk} onClick={readDisk}>{t('reloadDisk')}</Button><Button size="sm" disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</Button>
             <Button size="sm" disabled={!writable || book.chapters[0].chapterId === chapterId} onClick={() => move(-1)}><IconChevronUpOutline14 />{t('moveUp')}</Button>
@@ -423,6 +427,7 @@ export function Books({ api, sessionId, t, setup }) {
         </>}
       </main>
     </div>}
+    {book && entry && !planning && <WorkspacePanel id="sn-panel-story-state" title={t('storyState')} open={pane === 'story-state'} close={closePane} t={t}><StoryStatePanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={chapterId} entry={entry} selection={selection} open={pane === 'story-state'} writable={writable} dirty={dirty} t={t} changed={() => setRefresh(value => value + 1)} locate={(start, end) => { showWriting(); setEditing(true); requestAnimationFrame(() => { editor.current?.focus(); editor.current?.setSelectionRange(start,end) }) }} openChapter={id => action(async () => { await flushDraft(); capturePosition(); setChapterId(id); setDocuments('chapters'); setPane(''); setWorkTab('writing') })} /></WorkspacePanel>}
     {book && entry && !planning && <WorkspacePanel id="sn-panel-intent" title={t('chapterIntent')} open={pane === 'intent'} close={closePane} t={t}><ChapterIntent key={`${library.workspaceId}:${bookId}:${chapterId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={chapterId} entry={entry} open={pane === 'intent'} writable={writable} dirty={dirty} t={t} changed={() => setRefresh(value => value + 1)} /></WorkspacePanel>}
     {entry && <WorkspacePanel id="sn-panel-selection-ai" title={t('selectionAI')} open={pane === 'selection-ai'} close={closePane} t={t}>
       <p className="sn-notice">{t(dirty ? 'saveBeforeAI' : 'selectionAIRange')}</p>

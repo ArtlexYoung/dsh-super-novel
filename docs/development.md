@@ -90,3 +90,5 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 平台补验可在对应机器执行上面的类型、构建、测试和包检查，再运行实际包 workflow/reopen。Windows 的目录 fsync 限制及文件占用重试已有模拟回归，不能替代 Windows/Linux 实机验收。其他桌面版本也需单独验证。POSIX 权限测试在 Windows 跳过，跳过项必须记录。
 
 写作辅助用 `scripts/browser-writing-methods.ts` 验证意图输入保留、磁盘版本、AI 方向编辑、纯读上下文和局部审校候选。`test/writing-methods.test.ts` 覆盖幂等、冲突、来源变化、预算、引用越界、范围保护和备份包含意图。
+
+跨章状态用 `scripts/browser-story-state.ts` 验证手工事件、可编辑建议、明确确认、两章伏笔、纯读上下文与修改影响。`test/story-state.test.ts` 包含五章序列、人物知情隔离、来源变化、前章重排、采纳中断重放和损坏格式。`test/proposal-host.test.ts` 用真实 Host 的备份任务核对 AI 与事实采纳后的归档，定时等待在测试中提前触发。

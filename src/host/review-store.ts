@@ -64,10 +64,11 @@ export class ReviewStore {
   }
   private context(proposal: Awaited<ReturnType<ProposalStore['read']>>): string {
     return json({ materials: proposal.request.materials, selected: proposal.context ?? [], facts: proposal.factContext?.content ?? '',
-      ...(proposal.voiceContext ? { voices: proposal.voiceContext } : {}), ...(proposal.intentContext ? { sceneIntent: proposal.intentContext } : {}), ...(proposal.request.hardConstraints ? { hardConstraints: proposal.request.hardConstraints } : {}) })
+      ...(proposal.voiceContext ? { voices: proposal.voiceContext } : {}), ...(proposal.intentContext ? { sceneIntent: proposal.intentContext } : {}), ...(proposal.request.hardConstraints ? { hardConstraints: proposal.request.hardConstraints } : {}), ...(proposal.storyContext ? { storyState: proposal.storyContext } : {}) })
   }
   private async view(record: Record): Promise<ReviewView> {
-    const target = await this.target(record.request)
+    const current = await this.books.readBook(record.request.bookId)
+    const target = await this.target({ ...record.request, expectedRevision: current.revision })
     return { ...record.result, ...(!target.valid || target.context !== record.context ? { state: 'expired' as const, reason: 'revision-conflict' } : {}) } as ReviewView
   }
   async run(input: ReviewRequest, generate: TextGenerator | false, signal: AbortSignal): Promise<ReviewView> {
@@ -142,6 +143,9 @@ export class ReviewStore {
     }
     return result.sort((a, b) => b.createdAt - a.createdAt)
   }
+  async get(bookId: string, reviewId: string): Promise<ReviewView> {
+    return await this.view(await this.read(bookId, reviewId))
+  }
   async revision(bookId: string, reviewId: string, issueId: string): Promise<{ request: GenerateChapterRequest; round: number }> {
     const record = await this.read(bookId, reviewId)
     if ((await this.view(record)).state === 'expired') throw new BookError('review-stale')
@@ -150,10 +154,11 @@ export class ReviewStore {
     const parent = record.request.proposalId ? await this.proposals.read(bookId, record.request.proposalId) : false
     const round = (parent && parent.revisionRound || 0) + 1
     if (round > 2) throw new BookError('revision-limit')
-    return { round, request: { proposalId: randomUUID(), bookId, chapterId: record.request.chapterId, expectedRevision: record.request.expectedRevision,
+    const current = await this.books.readBook(bookId)
+    return { round, request: { proposalId: randomUUID(), bookId, chapterId: record.request.chapterId, expectedRevision: current.revision,
       expectedHash: parent ? parent.request.expectedHash : record.request.expectedHash, mode: 'rewrite', instruction: `${issue.message}\n${issue.suggestion}`, materials: parent ? parent.request.materials : '',
       ...(parent ? {
-        ...(parent.request.hardConstraints !== undefined ? { hardConstraints: parent.request.hardConstraints } : {}), ...(parent.request.intentVersion !== undefined ? { intentVersion: parent.request.intentVersion } : {}), ...(parent.request.precedingChapterIds ? { precedingChapterIds: parent.request.precedingChapterIds } : {})
+        ...(parent.request.hardConstraints !== undefined ? { hardConstraints: parent.request.hardConstraints } : {}), ...(parent.request.intentVersion !== undefined ? { intentVersion: parent.request.intentVersion } : {}), ...(parent.request.precedingChapterIds ? { precedingChapterIds: parent.request.precedingChapterIds } : {}), ...(parent.request.useStoryState ? { useStoryState: true, knowledgeScope: parent.request.knowledgeScope } : {})
       } : {
         ...(record.request.hardConstraints !== undefined ? { hardConstraints: record.request.hardConstraints } : {}), ...(record.request.intentVersion !== undefined ? { intentVersion: record.request.intentVersion } : {}), ...(record.request.materialIds ? { materialIds: record.request.materialIds } : {})
       }),

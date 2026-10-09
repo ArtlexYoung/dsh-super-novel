@@ -13,6 +13,7 @@ import { FactStore } from './fact-store.js'
 import { ReviewStore } from './review-store.js'
 import { VoiceStore } from './voice-store.js'
 import { IntentStore } from './intent-store.js'
+import { StoryStore } from './story-store.js'
 
 const queues = new Map<string, Promise<void>>()
 
@@ -111,6 +112,8 @@ export class ProposalStore {
     const voices = request.voiceIds ? await new VoiceStore(this.books).selected(request.bookId, request.voiceIds) : undefined
     const facts = request.useFacts ? await (await FactStore.at(this.files.root, this.workspaceId, this.books)).context(request.bookId, request.chapterId, request.knowledgeScope ?? 'reader', 128 * 1024) : undefined
     if (facts && facts.state !== 'complete') throw new BookError(facts.state === 'over-budget' ? 'context-too-large' : 'facts-incomplete')
+    const story = request.useStoryState ? await (await StoryStore.at(this.files.root, this.workspaceId, this.books)).context(request.bookId, request.chapterId, request.knowledgeScope ?? 'reader') : false
+    if (story && story.state !== 'ready') throw new BookError(story.state === 'over-budget' ? 'context-too-large' : 'story-state-expired')
     if ((await this.books.readBook(request.bookId)).revision !== request.expectedRevision) throw new BookError('revision-conflict')
     const proposal: Proposal = { schemaVersion: 1, workspaceId: this.workspaceId, sessionId, owner, request,
       requestHash: hash(json(request)), acceptanceId: randomUUID(), baseline,
@@ -120,6 +123,7 @@ export class ProposalStore {
       ...(chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind ? { documentKind: chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind } : {}),
       ...(request.materialIds || request.precedingChapterIds ? { context } : {}),
       ...(intent ? { intentContext: { version: intent.version, hash: intent.hash, intent: intent.intent } } : {}),
+      ...(story ? { storyContext: { content: story.content, hash: story.hash, scope: request.knowledgeScope ?? 'reader' } } : {}),
       ...(voices ? { voiceContext: voices.map(voice => ({ ...voice, schemaVersion: 1 as const, state: 'active' as const })) } : {}),
       ...(facts ? { factContext: { content: json({ facts: facts.facts, summaries: facts.summaries }), scope: request.knowledgeScope ?? 'reader', sources: [...facts.sources] } } : {}),
       ...(round ? { revisionRound: round } : {}), ...(request.parentProposalId ? { parentCandidateHash: hash(baseline) } : {}) }
@@ -141,6 +145,7 @@ export class ProposalStore {
     if (proposal.request.materials) add('materials', '', 'Author references', 'author', proposal.request.materials)
     for (const item of proposal.context ?? []) add(item.kind, item.chapterId, item.title, item.kind === 'chapter' ? 'preceding' : 'selected', item.content)
     if (proposal.factContext) add('facts', '', 'Facts', `knowledge:${proposal.factContext.scope}`, proposal.factContext.content)
+    if (proposal.storyContext) add('story-state', '', 'Confirmed story changes', `knowledge:${proposal.storyContext.scope}`, proposal.storyContext.content)
     for (const voice of proposal.voiceContext ?? []) add('voice', voice.voiceId, voice.sourceDescription, 'authorized', voice.sample)
     add('chapter', proposal.request.chapterId, 'Saved chapter', 'baseline', proposal.baseline)
     return { bytes, maxBytes, state: bytes > maxBytes ? 'over-budget' : 'ready', sections }
@@ -176,22 +181,35 @@ export class ProposalStore {
     if (proposal.state === 'rejected') return proposalView(proposal, 'rejected', proposal.reason, book.recoveryRequired)
     if (book.recoveryRequired) return proposalView(proposal, proposal.state === 'generating' && !active ? 'interrupted' : proposal.state, 'recovery-required', true)
     const chapter = await this.books.readChapter(bookId, proposal.request.chapterId)
-    if (chapter.book.revision !== proposal.request.expectedRevision || chapter.hash !== proposal.request.expectedHash) return proposalView(proposal, active && proposal.state === 'generating' ? 'generating' : 'expired', 'revision-conflict', false)
+    if (chapter.book.chapters.find(item => item.chapterId === proposal.request.chapterId)!.revision !== proposal.baselineChapterRevision || chapter.hash !== proposal.request.expectedHash || chapter.externallyModified) return proposalView(proposal, active && proposal.state === 'generating' ? 'generating' : 'expired', 'revision-conflict', false)
     if (proposal.intentContext) {
       const intent = await (await IntentStore.at(this.files.root, this.workspaceId, this.books)).read(bookId, proposal.request.chapterId)
       if (intent.version !== proposal.intentContext.version || intent.hash !== proposal.intentContext.hash) return proposalView(proposal, 'expired', 'intent-changed', false)
     }
     for (const item of proposal.context ?? []) {
       const current = await this.books.readChapter(bookId, item.chapterId)
-      if (current.hash !== item.hash || current.externallyModified) return proposalView(proposal, 'expired', 'revision-conflict', false)
+      const document = current.book.chapters.find(document => document.chapterId === item.chapterId)!
+      if (current.hash !== item.hash || current.externallyModified || document.revision !== item.revision || !availableDocument(document)) return proposalView(proposal, 'expired', 'revision-conflict', false)
+      if (proposal.request.precedingChapterIds?.includes(item.chapterId) &&
+        chapter.book.chapters.findIndex(document => document.chapterId === item.chapterId) >= chapter.book.chapters.findIndex(document => document.chapterId === proposal.request.chapterId)) return proposalView(proposal, 'expired', 'revision-conflict', false)
     }
     for (const item of proposal.factContext?.sources ?? []) {
       const source = await this.books.readChapter(bookId, item.chapterId), record = await this.books.readChapter(bookId, item.recordId)
       if (source.hash !== item.hash || source.book.chapters.find(chapter => chapter.chapterId === item.chapterId)?.revision !== item.revision || record.hash !== item.recordHash || source.externallyModified || record.externallyModified) return proposalView(proposal, 'expired', 'revision-conflict', false)
     }
+    if (proposal.factContext) {
+      // New or reordered preceding chapters can change the selection even when
+      // every old source is intact. Compare the complete selected context too.
+      const current = await (await FactStore.at(this.files.root, this.workspaceId, this.books)).context(bookId, proposal.request.chapterId, proposal.factContext.scope, 128 * 1024)
+      if (current.state !== 'complete' || json({ facts: current.facts, summaries: current.summaries }) !== proposal.factContext.content || json(current.sources) !== json(proposal.factContext.sources)) return proposalView(proposal, 'expired', 'facts-changed', false)
+    }
     for (const item of proposal.voiceContext ?? []) {
       const current = await new VoiceStore(this.books).read(bookId, item.voiceId)
       if (current.state !== 'active' || current.hash !== item.hash) return proposalView(proposal, 'expired', 'voice-unavailable', false)
+    }
+    if (proposal.storyContext) {
+      const current = await (await StoryStore.at(this.files.root, this.workspaceId, this.books)).context(bookId, proposal.request.chapterId, proposal.storyContext.scope)
+      if (current.state !== 'ready' || current.hash !== proposal.storyContext.hash) return proposalView(proposal, 'expired', 'story-state-expired', false)
     }
     return proposalView(proposal, proposal.state === 'generating' && !active ? 'interrupted' : proposal.state,
       proposal.state === 'generating' && !active ? 'host-restarted' : proposal.reason, false)
@@ -225,7 +243,7 @@ export class ProposalStore {
       signal.throwIfAborted()
       const file = await this.files.read(this.path(request.bookId, request.proposalId), 32 * 1024 * 1024)
       if (!file.exists) throw new BookError('proposal-not-found')
-      const proposal = parseProposal(file.text, this.workspaceId, request.bookId, request.proposalId)
+      let proposal = parseProposal(file.text, this.workspaceId, request.bookId, request.proposalId)
       if (proposal.candidateHash !== request.expectedCandidateHash) throw new BookError('operation-conflict')
       const view = await this.view(request.bookId, request.proposalId, false)
       if (view.recoveryRequired) throw new BookError('recovery-required')
@@ -239,9 +257,16 @@ export class ProposalStore {
       }
       if (proposal.state === 'generating') throw new BookError('proposal-running')
       if (accept && (view.state !== 'review' || !proposal.replacement.trim())) throw new BookError(view.state === 'expired' ? 'proposal-stale' : 'proposal-incomplete')
-      if (accept) await this.books.mutate(adoption(proposal), signal)
+      if (accept) {
+        const revision = (await this.books.readBook(request.bookId)).revision
+        if (proposal.acceptanceRevision !== revision && revision !== proposal.request.expectedRevision) {
+          proposal = { ...proposal, acceptanceRevision: revision }
+          await this.write(proposal, file)
+        }
+        await this.books.mutate(adoption(proposal), signal)
+      }
       const next = { ...proposal, state: accept ? 'accepted' as const : 'rejected' as const, updatedAt: Date.now() }
-      await this.write(next, file)
+      await this.write(next, await this.files.read(this.path(request.bookId, request.proposalId), 32 * 1024 * 1024))
       return await this.view(request.bookId, request.proposalId, false)
     })
   }

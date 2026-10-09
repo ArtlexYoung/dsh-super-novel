@@ -24,6 +24,9 @@ import type { StorageLocation, ChangeStorageLocationRequest, PickStorageLocation
 import type { GenerateChapterRequest, ProposalDecisionRequest, ProposalSummary, ProposalView } from './types.js'
 import { ProposalStore } from './host/proposal-store.js'
 import { IntentStore } from './host/intent-store.js'
+import { StoryStore } from './host/story-store.js'
+import { chapterImpacts } from './host/chapter-impacts.js'
+import type { StoryState, SaveStoryStateRequest, SuggestStoryStateRequest, StoryStateSuggestion, ChapterImpacts } from './types.js'
 import type { ChapterIntent, SaveIntentRequest, SuggestIntentRequest, IntentSuggestion, GenerationContextPreview } from './types.js'
 import { ProposalTasks } from './host/proposal-tasks.js'
 import { hostChapterGenerator, hostTextGenerator } from './host/chapter-generator.js'
@@ -60,6 +63,7 @@ export class SuperNovel extends TypertRemoteService {
   private readonly lifetime = new AbortController()
   private readonly extractions = new Map<string, Promise<FactProposal>>()
   private readonly reviews = new Map<string, Promise<ReviewView>>()
+  private readonly storySuggestions = new Map<string, Promise<StoryStateSuggestion>>()
   private readonly directions = new Map<string, Promise<IntentSuggestion>>()
 
   constructor(ctx: Context) {
@@ -69,7 +73,7 @@ export class SuperNovel extends TypertRemoteService {
       this.lifetime.abort()
       for (const timer of this.backupTimers.values()) clearTimeout(timer)
       this.backupTimers.clear()
-      await Promise.allSettled([this.tasks.dispose(), ...this.extractions.values(), ...this.reviews.values(), ...this.directions.values(), ...this.backupJobs])
+      await Promise.allSettled([this.tasks.dispose(), ...this.extractions.values(), ...this.reviews.values(), ...this.directions.values(), ...this.storySuggestions.values(), ...this.backupJobs])
     })
   }
 
@@ -179,6 +183,12 @@ export class SuperNovel extends TypertRemoteService {
     timer.unref(); this.backupTimers.set(key, timer)
   }
 
+  private async backedUp<T>(root: string, bookId: string, sessionId: string, write: Promise<T>): Promise<T> {
+    const value = await write
+    this.scheduleBackup(root, bookId, sessionId)
+    return value
+  }
+
   private async backupScope(sessionId: string, workspaceId: string, writing: boolean, signal: AbortSignal) {
     const scope = await workspaceBooks(this.ctx, sessionId, writing, signal)
     if (scope.workspaceId !== workspaceId) throw new BookError('location-changed')
@@ -274,7 +284,7 @@ export class SuperNovel extends TypertRemoteService {
       await (await StorageLocations.at(scope.defaultRoot)).validate((await backups.settings()).root, scope.mode)
       const book = await scope.store.readBook(request.bookId)
       if (book.schemaVersion === 1) await backups.create(request.bookId, request.backupId, signal)
-      return await scope.store.upgrade(request.bookId, request.expectedRevision, request.operationId, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, scope.store.upgrade(request.bookId, request.expectedRevision, request.operationId, signal))
     })
   }
 
@@ -315,9 +325,9 @@ export class SuperNovel extends TypertRemoteService {
       if (source.book.revision !== request.expectedRevision || source.hash !== request.sourceHash || source.externallyModified) throw new BookError('revision-conflict')
       if (request.end <= request.start || request.end > source.content.length) throw new BookError('invalid-evidence')
       const quote = source.content.slice(request.start, request.end)
-      return await scope.store.mutate({ workspaceId: scope.workspaceId, operationId: request.operationId, bookId: request.bookId, expectedRevision: request.expectedRevision, chapterId: request.chapterId,
+      return await this.backedUp(scope.root, request.bookId, sessionId, scope.store.mutate({ workspaceId: scope.workspaceId, operationId: request.operationId, bookId: request.bookId, expectedRevision: request.expectedRevision, chapterId: request.chapterId,
         action: 'create', title: request.title, content: quote, expectedHash: '', beforeChapterId: '', kind: request.kind as SelectionMaterialRequest['kind'],
-        ...(!metadata.kind || metadata.kind === 'chapter' ? { linkedChapterIds: [request.sourceChapterId] } : {}), sourceEvidence: { chapterId: metadata.chapterId, revision: metadata.revision, hash: source.hash, quote, start: request.start, end: request.end } }, signal)
+        ...(!metadata.kind || metadata.kind === 'chapter' ? { linkedChapterIds: [request.sourceChapterId] } : {}), sourceEvidence: { chapterId: metadata.chapterId, revision: metadata.revision, hash: source.hash, quote, start: request.start, end: request.end } }, signal))
     })
   }
 
@@ -355,14 +365,18 @@ export class SuperNovel extends TypertRemoteService {
   async settleDraft(sessionId: string, request: SettleDraftRequest, signal: AbortSignal): Promise<DraftSummary> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await (await DraftStore.at(scope.root, scope.workspaceId, scope.store)).settle(request, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, (await DraftStore.at(scope.root, scope.workspaceId, scope.store)).settle(request, signal))
     })
   }
 
   /** Create a book under the Session's workspace after an explicit user action. */
   @Remote
   async createBook(sessionId: string, request: CreateBookRequest, signal: AbortSignal): Promise<BookSnapshot> {
-    return await storageResult(async () => (await workspaceBooks(this.ctx, sessionId, true, signal)).store.createBook(request, signal))
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal), book = await scope.store.createBook(request, signal)
+      this.scheduleBackup(scope.root, book.bookId, sessionId)
+      return book
+    })
   }
 
   /** Read one chapter and its actual on-disk baseline; never hides external edits. */
@@ -377,6 +391,52 @@ export class SuperNovel extends TypertRemoteService {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
       return await (await IntentStore.at(scope.root, scope.workspaceId, scope.store)).read(bookId, chapterId)
+    })
+  }
+
+  @Remote
+  async storyState(sessionId: string, bookId: string, signal: AbortSignal): Promise<StoryState> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await StoryStore.at(scope.root, scope.workspaceId, scope.store)).read(bookId)
+    })
+  }
+
+  @Remote
+  async saveStoryState(sessionId: string, request: SaveStoryStateRequest, signal: AbortSignal): Promise<StoryState> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal), value = await (await StoryStore.at(scope.root, scope.workspaceId, scope.store)).save(request, signal)
+      this.scheduleBackup(scope.root, request.bookId, sessionId)
+      return value
+    })
+  }
+
+  @Remote
+  async chapterStateSuggestions(sessionId: string, bookId: string, chapterId: string, signal: AbortSignal): Promise<StoryStateSuggestion[]> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await StoryStore.at(scope.root, scope.workspaceId, scope.store)).suggestions(bookId, chapterId)
+    })
+  }
+
+  @Remote
+  async suggestChapterState(sessionId: string, request: SuggestStoryStateRequest, signal: AbortSignal): Promise<StoryStateSuggestion> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal), key = `${scope.workspaceId}:${JSON.stringify(request)}`
+      const existing = this.storySuggestions.get(key)
+      if (existing) return await existing
+      const task = (await StoryStore.at(scope.root, scope.workspaceId, scope.store)).suggest(request, hostTextGenerator(this.ctx, scope.session), AbortSignal.any([signal, this.lifetime.signal, AbortSignal.timeout(300_000)]))
+      this.storySuggestions.set(key, task)
+      try { const value = await task; this.scheduleBackup(scope.root, request.bookId, sessionId); return value }
+      finally { if (this.storySuggestions.get(key) === task) this.storySuggestions.delete(key) }
+    })
+  }
+
+  @Remote
+  async chapterImpacts(sessionId: string, bookId: string, chapterId: string, signal: AbortSignal): Promise<ChapterImpacts> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await chapterImpacts(scope.root, scope.workspaceId, scope.store, bookId, chapterId, signal)
     })
   }
 
@@ -436,7 +496,10 @@ export class SuperNovel extends TypertRemoteService {
   /** Explicitly settle an interrupted save; a third version is never overwritten. */
   @Remote
   async recoverBook(sessionId: string, bookId: string, signal: AbortSignal): Promise<BookSnapshot> {
-    return await storageResult(async () => (await workspaceBooks(this.ctx, sessionId, true, signal)).store.recover(bookId, signal))
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await this.backedUp(scope.root, bookId, sessionId, scope.store.recover(bookId, signal))
+    })
   }
 
   /** Preview current and intended text of a pending chapter save without writing. */
@@ -448,7 +511,10 @@ export class SuperNovel extends TypertRemoteService {
   /** Keep the original intention, then publish explicitly reviewed text as a new revision. */
   @Remote
   async settleInterruptedSave(sessionId: string, request: SettleInterruptedSaveRequest, signal: AbortSignal): Promise<BookSnapshot> {
-    return await storageResult(async () => (await workspaceBooks(this.ctx, sessionId, true, signal)).store.settleInterrupted(request, signal))
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, scope.store.settleInterrupted(request, signal))
+    })
   }
 
   /** Read up to 100 saved versions before a book revision; zero starts at the latest. */
@@ -466,7 +532,10 @@ export class SuperNovel extends TypertRemoteService {
   /** Restore selected text as a new revision after rechecking the actual disk baseline. */
   @Remote
   async restoreChapter(sessionId: string, request: RestoreChapterRequest, signal: AbortSignal): Promise<BookSnapshot> {
-    return await storageResult(async () => new ChapterHistory((await workspaceBooks(this.ctx, sessionId, true, signal)).store).restore(request, signal))
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, new ChapterHistory(scope.store).restore(request, signal))
+    })
   }
 
   /** Preserve both the author's local draft and the current disk text. */
@@ -474,7 +543,7 @@ export class SuperNovel extends TypertRemoteService {
   async preserveConflict(sessionId: string, request: PreserveConflictRequest, signal: AbortSignal): Promise<ChapterConflict> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await (await ChapterConflicts.at(scope.root, scope.workspaceId, scope.store)).preserve(request, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, (await ChapterConflicts.at(scope.root, scope.workspaceId, scope.store)).preserve(request, signal))
     })
   }
 
@@ -492,7 +561,7 @@ export class SuperNovel extends TypertRemoteService {
   async resolveConflict(sessionId: string, request: ResolveConflictRequest, signal: AbortSignal): Promise<BookSnapshot> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await (await ChapterConflicts.at(scope.root, scope.workspaceId, scope.store)).resolve(request, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, (await ChapterConflicts.at(scope.root, scope.workspaceId, scope.store)).resolve(request, signal))
     })
   }
 
@@ -501,7 +570,7 @@ export class SuperNovel extends TypertRemoteService {
   async proposeFacts(sessionId: string, request: ProposeFactsRequest, signal: AbortSignal): Promise<FactProposal> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await (await FactStore.at(scope.root, scope.workspaceId, scope.store)).propose(request, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, (await FactStore.at(scope.root, scope.workspaceId, scope.store)).propose(request, signal))
     })
   }
 
@@ -517,7 +586,7 @@ export class SuperNovel extends TypertRemoteService {
   async acceptFacts(sessionId: string, bookId: string, proposalId: string, expectedHash: string, signal: AbortSignal): Promise<FactProposal> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await (await FactStore.at(scope.root, scope.workspaceId, scope.store)).decide(bookId, proposalId, expectedHash, true, signal)
+      return await this.backedUp(scope.root, bookId, sessionId, (await FactStore.at(scope.root, scope.workspaceId, scope.store)).decide(bookId, proposalId, expectedHash, true, signal))
     })
   }
 
@@ -525,7 +594,7 @@ export class SuperNovel extends TypertRemoteService {
   async rejectFacts(sessionId: string, bookId: string, proposalId: string, expectedHash: string, signal: AbortSignal): Promise<FactProposal> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await (await FactStore.at(scope.root, scope.workspaceId, scope.store)).decide(bookId, proposalId, expectedHash, false, signal)
+      return await this.backedUp(scope.root, bookId, sessionId, (await FactStore.at(scope.root, scope.workspaceId, scope.store)).decide(bookId, proposalId, expectedHash, false, signal))
     })
   }
 
@@ -539,7 +608,7 @@ export class SuperNovel extends TypertRemoteService {
       if (existing) return await existing
       const task = extractFacts(scope.store, await FactStore.at(scope.root, scope.workspaceId, scope.store), request, hostTextGenerator(this.ctx, scope.session), AbortSignal.any([signal, this.lifetime.signal, AbortSignal.timeout(300_000)]))
       this.extractions.set(key, task)
-      try { return await task } finally { if (this.extractions.get(key) === task) this.extractions.delete(key) }
+      try { return await this.backedUp(scope.root, request.bookId, sessionId, task) } finally { if (this.extractions.get(key) === task) this.extractions.delete(key) }
     })
   }
 
@@ -556,7 +625,7 @@ export class SuperNovel extends TypertRemoteService {
   async authorizeVoice(sessionId: string, request: AuthorizeVoiceRequest, signal: AbortSignal): Promise<BookSnapshot> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await new VoiceStore(scope.store).authorize(request, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, new VoiceStore(scope.store).authorize(request, signal))
     })
   }
 
@@ -564,7 +633,7 @@ export class SuperNovel extends TypertRemoteService {
   async revokeVoice(sessionId: string, bookId: string, voiceId: string, expectedRevision: number, expectedHash: string, operationId: string, signal: AbortSignal): Promise<BookSnapshot> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await new VoiceStore(scope.store).revoke(bookId, voiceId, expectedRevision, expectedHash, operationId, signal)
+      return await this.backedUp(scope.root, bookId, sessionId, new VoiceStore(scope.store).revoke(bookId, voiceId, expectedRevision, expectedHash, operationId, signal))
     })
   }
 
@@ -580,7 +649,9 @@ export class SuperNovel extends TypertRemoteService {
   async importBook(sessionId: string, request: ImportRequest, signal: AbortSignal): Promise<BookSnapshot> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await (await BookTransfer.at(scope.root, scope.store)).import(request, signal)
+      const book = await (await BookTransfer.at(scope.root, scope.store)).import(request, signal)
+      this.scheduleBackup(scope.root, book.bookId, sessionId)
+      return book
     })
   }
 
@@ -604,7 +675,7 @@ export class SuperNovel extends TypertRemoteService {
       try { generate = hostTextGenerator(this.ctx, scope.session) } catch {}
       const task = (await ReviewStore.at(scope.root, scope.workspaceId, scope.store)).run(request, generate, AbortSignal.any([signal, this.lifetime.signal, AbortSignal.timeout(300_000)]))
       this.reviews.set(key, task)
-      try { return await task } finally { if (this.reviews.get(key) === task) this.reviews.delete(key) }
+      try { return await this.backedUp(scope.root, request.bookId, sessionId, task) } finally { if (this.reviews.get(key) === task) this.reviews.delete(key) }
     })
   }
 
@@ -624,7 +695,7 @@ export class SuperNovel extends TypertRemoteService {
       const review = await ReviewStore.at(scope.root, scope.workspaceId, scope.store)
       const revision = await review.revision(bookId, reviewId, issueId)
       const store = await ProposalStore.at(scope.root, scope.workspaceId, scope.store)
-      return await this.tasks.start(store, sessionId, { ...revision.request, proposalId }, hostChapterGenerator(this.ctx, scope.session), signal)
+      return await this.backedUp(scope.root, bookId, sessionId, this.tasks.start(store, sessionId, { ...revision.request, proposalId }, hostChapterGenerator(this.ctx, scope.session), signal))
     })
   }
 
@@ -642,7 +713,7 @@ export class SuperNovel extends TypertRemoteService {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
       const store = await ProposalStore.at(scope.root, scope.workspaceId, scope.store)
-      return await this.tasks.start(store, sessionId, request, hostChapterGenerator(this.ctx, scope.session), signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, this.tasks.start(store, sessionId, request, hostChapterGenerator(this.ctx, scope.session), signal))
     })
   }
 
@@ -671,7 +742,7 @@ export class SuperNovel extends TypertRemoteService {
   async stopProposal(sessionId: string, bookId: string, proposalId: string, signal: AbortSignal): Promise<ProposalView> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await this.tasks.stop(await ProposalStore.at(scope.root, scope.workspaceId, scope.store), bookId, proposalId)
+      return await this.backedUp(scope.root, bookId, sessionId, this.tasks.stop(await ProposalStore.at(scope.root, scope.workspaceId, scope.store), bookId, proposalId))
     })
   }
 
@@ -680,7 +751,7 @@ export class SuperNovel extends TypertRemoteService {
   async acceptProposal(sessionId: string, request: ProposalDecisionRequest, signal: AbortSignal): Promise<ProposalView> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await (await ProposalStore.at(scope.root, scope.workspaceId, scope.store)).decide(request, true, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, (await ProposalStore.at(scope.root, scope.workspaceId, scope.store)).decide(request, true, signal))
     })
   }
 
@@ -689,7 +760,7 @@ export class SuperNovel extends TypertRemoteService {
   async rejectProposal(sessionId: string, request: ProposalDecisionRequest, signal: AbortSignal): Promise<ProposalView> {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
-      return await (await ProposalStore.at(scope.root, scope.workspaceId, scope.store)).decide(request, false, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, (await ProposalStore.at(scope.root, scope.workspaceId, scope.store)).decide(request, false, signal))
     })
   }
 }

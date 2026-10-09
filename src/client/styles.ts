@@ -114,5 +114,10 @@ export const styles = `
 .sn-editor-footer > .sn-row { flex-wrap: nowrap; justify-content: flex-end; gap: 2px; margin: 0; }
 .sn-editor-footer > .sn-row > span { display:none; }
 .sn-editor-footer > .sn-row > button { height:28px; min-height:28px; font-size:11px; white-space:nowrap; padding:2px 6px; }
+.sn-story-state .sn-modes { display:flex; flex-wrap:wrap; gap:4px; }
+.sn-story-evidence blockquote { white-space:pre-wrap; overflow-wrap:anywhere; margin:8px 0; padding:8px 10px; background:var(--dsw-alias-bg-module-platform); border-radius:8px; }
+.sn-story-form .sn-input,.sn-story-form .sn-select { margin:6px 0; }
+.sn-story-form { border:0; margin:0; padding:0; min-width:0; }
+.sn-story-state .sn-row { flex-wrap:wrap; }
 .sn-reference-panel .sn-modes { flex-wrap: wrap; }
 `

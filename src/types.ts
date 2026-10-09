@@ -111,6 +111,37 @@ export interface GenerateChapterRequest {
   readonly hardConstraints?: string
   readonly intentVersion?: number
   readonly precedingChapterIds?: readonly string[]
+  readonly useStoryState?: boolean
+}
+export interface StoryEvidence {
+  readonly chapterId: string; readonly revision: number; readonly hash: string
+  readonly start: number; readonly end: number; readonly quote: string
+}
+export type StoryTime = { readonly kind: 'unknown' } | { readonly kind: 'known'; readonly label: string; readonly order: number }
+export interface CharacterChange { readonly characterId: string; readonly kind: 'location' | 'injury' | 'item' | 'knowledge'; readonly value: string }
+export interface StoryEvent { readonly eventId: string; readonly title: string; readonly time: StoryTime; readonly evidence: StoryEvidence; readonly changes: readonly CharacterChange[] }
+export interface Foreshadow { readonly foreshadowId: string; readonly title: string; readonly note: string; readonly status: 'planned' | 'planted' | 'unresolved' | 'resolved'; readonly planted?: StoryEvidence; readonly resolved?: StoryEvidence }
+export interface StoryState {
+  readonly version: number; readonly bookId: string
+  readonly events: readonly (StoryEvent & { readonly state: 'valid' | 'expired'; readonly narrativeOrder: number })[]
+  readonly foreshadows: readonly (Foreshadow & { readonly state: 'valid' | 'expired' })[]
+}
+export interface SaveStoryStateRequest {
+  readonly workspaceId: string; readonly bookId: string; readonly operationId: string; readonly expectedVersion: number; readonly expectedRevision: number
+  readonly event?: StoryEvent; readonly foreshadow?: Foreshadow
+}
+export interface SuggestStoryStateRequest {
+  readonly workspaceId: string; readonly bookId: string; readonly chapterId: string; readonly proposalId: string; readonly expectedRevision: number; readonly expectedHash: string
+}
+export interface StoryStateSuggestion {
+  readonly proposalId: string; readonly bookId: string; readonly chapterId: string; readonly sourceHash: string
+  readonly state: 'review' | 'expired'; readonly events: readonly StoryEvent[]; readonly foreshadows: readonly Foreshadow[]
+  readonly createdAt: number; readonly usage: GenerationUsage; readonly elapsedMs: number
+}
+export interface StoryContext { readonly content: string; readonly hash: string; readonly state: 'ready' | 'expired' | 'over-budget'; readonly bytes: number }
+export interface ChapterImpacts {
+  readonly complete: boolean
+  readonly items: readonly { readonly kind: 'facts' | 'summary' | 'material' | 'proposal' | 'review' | 'event' | 'foreshadow'; readonly id: string; readonly chapterId: string; readonly title: string; readonly state: 'current' | 'expired' }[]
 }
 export interface SceneIntent {
   readonly goal: string; readonly obstacle: string; readonly choice: string; readonly cost: string
