@@ -9,8 +9,8 @@ export function ReferencePanel({ api, sessionId, book, chapterId, open, writable
   const [query, setQuery] = useState(''), [kind, setKind] = useState('all'), [selected, setSelected] = useState('')
   const [view, setView] = useState({ kind: 'idle' })
   const previewHeading = useRef(null)
-  const materials = useMemo(() => book.chapters.filter(item => materialKinds.includes(item.kind)).sort((a, b) =>
-    Number(b.linkedChapterId === chapterId) - Number(a.linkedChapterId === chapterId)), [book, chapterId])
+  const materials = useMemo(() => book.chapters.filter(item => materialKinds.includes(item.kind) && !['archived', 'trashed'].includes(item.status)).sort((a, b) =>
+    Number(b.linkedChapterId === chapterId || b.linkedChapterIds?.includes(chapterId)) - Number(a.linkedChapterId === chapterId || a.linkedChapterIds?.includes(chapterId))), [book, chapterId])
   const filtered = materials.filter(item => (kind === 'all' || item.kind === kind) && item.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   const item = materials.find(item => item.chapterId === selected)
   useEffect(() => {

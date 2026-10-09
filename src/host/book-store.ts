@@ -1,9 +1,9 @@
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { BookError, contentSchema, documentKindSchema, hash, idSchema, json, parseBook, snapshot, titleSchema, transactionSchema, transactionSourceSchema } from '../domain/books.js'
+import { BookError, contentSchema, documentKindSchema, hash, idSchema, json, parseBook, snapshot, titleSchema, transactionSchema, transactionSourceSchema, availableDocument, materialKind, sourceEvidenceSchema } from '../domain/books.js'
 import type { Book, Transaction } from '../domain/books.js'
-import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, InterruptedChapterSave, SettleInterruptedSaveRequest } from '../types.js'
+import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, InterruptedChapterSave, SettleInterruptedSaveRequest, MaterialMetadataRequest } from '../types.js'
 import { BookFiles } from './book-files.js'
 import { parseFactDocument, validateFacts } from '../domain/facts.js'
 
@@ -14,7 +14,7 @@ const mutationSchema = z.strictObject({
   action: z.enum(['create', 'rename', 'move', 'save']), chapterId: idSchema,
   title: z.string().max(200), beforeChapterId: z.union([idSchema, z.literal('')]),
   content: contentSchema, expectedHash: z.string().max(64),
-  kind: documentKindSchema.optional(), linkedChapterId: idSchema.optional(),
+  kind: documentKindSchema.optional(), linkedChapterId: idSchema.optional(), sourceEvidence: sourceEvidenceSchema.optional(), linkedChapterIds: z.array(idSchema).max(1000).optional(),
 })
 export type CommitStage = 'creation' | 'prepared' | 'chapter' | 'manifest' | 'completed'
 export interface StoreHooks { afterStage?(stage: CommitStage): Promise<void> }
@@ -166,7 +166,7 @@ export class BookStore {
 
   async mutate(input: ChapterMutationRequest, signal: AbortSignal, source?: Transaction['source']): Promise<BookSnapshot> {
     const request = mutationSchema.parse(input)
-    if (request.action !== 'create' && (request.kind !== undefined || request.linkedChapterId !== undefined)) throw new BookError('invalid-request')
+    if (request.action !== 'create' && (request.kind !== undefined || request.linkedChapterId !== undefined || request.sourceEvidence !== undefined || request.linkedChapterIds !== undefined)) throw new BookError('invalid-request')
     const origin = source ? transactionSourceSchema.parse(source) : undefined
     return await this.files.lock(join(this.folder(request.bookId), '.write.lock'), async () => {
       signal.throwIfAborted()
@@ -187,11 +187,17 @@ export class BookStore {
         if (chapter) throw new BookError('operation-conflict')
         const before = await this.files.read(this.chapterPath(book.bookId, request.chapterId))
         if (before.exists) throw new BookError('revision-conflict')
+        if (request.sourceEvidence) {
+          if (book.schemaVersion !== 2 || !materialKind(request.kind)) throw new BookError('migration-required')
+          const source = await this.readChapter(book.bookId, request.sourceEvidence.chapterId)
+          if (source.externallyModified || source.hash !== request.sourceEvidence.hash || source.book.chapters.find(item => item.chapterId === source.chapterId)!.revision !== request.sourceEvidence.revision || source.content.slice(request.sourceEvidence.start, request.sourceEvidence.end) !== request.sourceEvidence.quote) throw new BookError('invalid-evidence')
+        }
         next.chapters.push({ chapterId: request.chapterId, title: titleSchema.parse(request.title), revision: 1, hash: hash(request.content),
-          ...(request.kind ? { kind: request.kind } : {}), ...(request.linkedChapterId ? { linkedChapterId: request.linkedChapterId } : {}) })
+          ...(request.kind ? { kind: request.kind } : {}), ...(request.linkedChapterId ? { linkedChapterId: request.linkedChapterId } : {}), ...(request.sourceEvidence ? { sourceEvidence: request.sourceEvidence } : {}), ...(request.linkedChapterIds ? { linkedChapterIds: request.linkedChapterIds } : {}) })
         changes.push({ chapterId: request.chapterId, before, after: request.content })
       } else {
         if (!chapter) throw new BookError('chapter-not-found')
+        if (!availableDocument(chapter)) throw new BookError('material-unavailable')
         if (request.action === 'rename') chapter.title = titleSchema.parse(request.title)
         if (request.action === 'move') {
           if (request.beforeChapterId === request.chapterId) throw new BookError('invalid-request')
@@ -224,6 +230,42 @@ export class BookStore {
       }
       parseBook(json(next), book.bookId)
       return await this.commit({ schemaVersion: 1, operationId: request.operationId, bookId: book.bookId, requestHash, state: 'prepared', before: file.text, after: next, changes, ...(origin ? { source: origin } : {}) }, signal)
+    })
+  }
+
+  /** Explicit schema upgrade; backup is created by the caller before this journal. */
+  async upgrade(bookId: string, expectedRevision: number, operationId: string, signal: AbortSignal): Promise<BookSnapshot> {
+    idSchema.parse(bookId); idSchema.parse(operationId); z.int().positive().parse(expectedRevision)
+    return await this.files.lock(join(this.folder(bookId), '.write.lock'), async () => {
+      const requestHash = hash(json({ bookId, expectedRevision, operationId, action: 'upgrade-v2' }))
+      if ((await this.receipt(bookId, operationId)).length) return await this.replay(bookId, operationId, requestHash)
+      const file = await this.files.read(this.manifest(bookId)), book = await this.readBook(bookId)
+      if (book.recoveryRequired) throw new BookError('recovery-required')
+      if (book.revision !== expectedRevision) throw new BookError('revision-conflict')
+      if (book.schemaVersion === 2) return book
+      const next = parseBook(file.text, bookId); next.schemaVersion = 2; next.revision++
+      return await this.commit({ schemaVersion: 1, operationId, bookId, requestHash, state: 'prepared', before: file.text, after: next, changes: [] }, signal)
+    })
+  }
+
+  async metadata(input: MaterialMetadataRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    const request = z.strictObject({ workspaceId: z.string(), bookId: idSchema, expectedRevision: z.int().positive(), operationId: idSchema, chapterId: idSchema,
+      tags: z.array(z.string().trim().min(1).max(80)).max(30), aliases: z.array(titleSchema).max(30), favorite: z.boolean(), status: z.enum(['active', 'inbox', 'archived', 'trashed']),
+      linkedChapterIds: z.array(idSchema).max(1000), relatedMaterialIds: z.array(idSchema).max(1000) }).parse(input)
+    return await this.files.lock(join(this.folder(request.bookId), '.write.lock'), async () => {
+      const requestHash = hash(json(request))
+      if ((await this.receipt(request.bookId, request.operationId)).length) return await this.replay(request.bookId, request.operationId, requestHash)
+      const file = await this.files.read(this.manifest(request.bookId)), view = await this.readBook(request.bookId)
+      if (view.recoveryRequired) throw new BookError('recovery-required')
+      if (view.schemaVersion !== 2) throw new BookError('migration-required')
+      if (view.revision !== request.expectedRevision) throw new BookError('revision-conflict')
+      const next = parseBook(file.text, request.bookId), item = next.chapters.find(item => item.chapterId === request.chapterId)
+      if (!item || !materialKind(item.kind)) throw new BookError('invalid-material')
+      Object.assign(item, { tags: request.tags, aliases: request.aliases, favorite: request.favorite, status: request.status,
+        linkedChapterIds: request.linkedChapterIds, relatedMaterialIds: request.relatedMaterialIds })
+      delete item.linkedChapterId
+      next.revision++; parseBook(json(next), next.bookId)
+      return await this.commit({ schemaVersion: 1, operationId: request.operationId, bookId: next.bookId, requestHash, state: 'prepared', before: file.text, after: next, changes: [] }, signal)
     })
   }
 

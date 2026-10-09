@@ -9,6 +9,8 @@ import { Reviews } from './reviews.js'
 import { Voices } from './voices.js'
 import { Transfer } from './transfer.js'
 import { DocumentDirectory } from './document-directory.js'
+import { materialKinds } from './materials.js'
+import { MaterialLibrary } from './material-library.js'
 import { Backups } from './backups.js'
 import { StorageSettings } from './storage-location.js'
 import { DraftRecovery } from './draft-recovery.js'
@@ -41,6 +43,7 @@ function download(text, title) {
 export function Books({ api, sessionId, t, setup }) {
   const root = useRef(null), compact = useCompactPane(root)
   const [pane, setPane] = useState('')
+  const [selectionMaterial, setSelectionMaterial] = useState(null)
   const positions = useRef(new Map()), returnPosition = useRef(false)
   const [library, setLibrary] = useState(null)
   const [bookId, setBookId] = useState('')
@@ -80,13 +83,13 @@ export function Books({ api, sessionId, t, setup }) {
   const editor = useRef(null)
   const entryIdentity = useRef('')
   const book = library?.books.find(item => item.bookId === bookId)
-  const editorWritable = library?.writable && !readingDisk && !book?.recoveryRequired
-  const writable = editorWritable && !busy
   const currentChapter = book?.chapters.find(item => item.chapterId === chapterId)
+  const editorWritable = library?.writable && !readingDisk && !book?.recoveryRequired && !['archived', 'trashed'].includes(currentChapter?.status)
+  const writable = editorWritable && !busy
   const planning = currentChapter?.kind && currentChapter.kind !== 'chapter'
   const activeTab = planning && !['writing', 'revisions'].includes(workTab) ? 'writing' : workTab
   const managementOpen = pane === 'management'
-  const overlayOpen = managementOpen || ['materials', 'create-material'].includes(pane) || compact && pane === 'directory'
+  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'selection-material'].includes(pane) || compact && pane === 'directory'
   const capturePosition = () => {
     if (!editor.current || !entry) return
     positions.current.set(documentIdentity, { start: editor.current.selectionStart, end: editor.current.selectionEnd, direction: editor.current.selectionDirection, scroll: editor.current.scrollTop })
@@ -300,7 +303,7 @@ export function Books({ api, sessionId, t, setup }) {
 
   const proposals = entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} preferredProposal={preferredProposal} adopted={() => setRefresh(value => value + 1)} />
   const editReference = id => action(async () => { await flushDraft(); capturePosition(); setDocuments('materials'); setChapterId(id); setWorkTab('writing'); setPane(''); clearFilters() })
-  const manageMaterials = () => { capturePosition(); setDocuments('materials'); setPane('directory'); clearFilters() }
+  const manageMaterials = () => { capturePosition(); setPane('library') }
   const materialCreated = (value, id, proposalId, generated) => {
     applyBook(value); setChapterId(id); setPreferredProposal(proposalId); clearFilters()
     // Creation is acknowledged before generation. Keep its form visible until
@@ -342,6 +345,7 @@ export function Books({ api, sessionId, t, setup }) {
     </>}
     <StorageSettings api={api} sessionId={sessionId} revision={refresh} writable={!busy} t={t} beforeSwitch={flushDraft} switching={setReadingDisk} switched={() => { setEntry(null); setLibrary(null); setBookId(''); setChapterId(''); setRefresh(value => value + 1) }} />
     {library && <Backups key={`backup:${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} writable={library.writable && !busy} t={t} beforeBackup={flushDraft} restored={() => setRefresh(value => value + 1)} />}
+    {book && <Button size="sm" onClick={manageMaterials}>{t('materialLibrary')}</Button>}
     {currentChapter && !planning && <div className="sn-more-tools"><Button size="sm" id="sn-tab-references" onClick={() => showTool('references')}>{t('tab-references')}</Button><Button size="sm" id="sn-tab-assessment" onClick={() => showTool('assessment')}>{t('tab-assessment')}</Button></div>}
     {currentChapter && <section className="sn-document-management"><h3>{currentChapter.title}</h3>
           <details className="sn-document-options" open={documentOptionsOpen} onToggle={event => setDocumentOptionsOpen(event.currentTarget.open)}><summary>{t('documentOptions')}</summary><div className="sn-row sn-recovery-actions"><Button size="sm" disabled={!entry || busy || readingDisk} onClick={readDisk}>{t('reloadDisk')}</Button><Button size="sm" disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</Button>
@@ -389,6 +393,10 @@ export function Books({ api, sessionId, t, setup }) {
           </div>
           {notice && notice !== 'saved' && <p className="sn-notice" role="status">{t(notice)}</p>}
           {entry && <><textarea className="sn-editor" hidden={!editing} data-book-id={bookId} data-chapter-id={chapterId} ref={editor} aria-label={t(planning ? 'materialText' : 'body')} placeholder={t('documentPlaceholder')} spellCheck={false} value={entry.content} readOnly={!editorWritable} onCompositionStart={() => { writerFor(library.workspaceId, bookId, chapterId).composing = true }} onCompositionEnd={() => { const writer = writerFor(library.workspaceId, bookId, chapterId); writer.composing = false; writer.attempt() }} onScroll={capturePosition} onBlur={capturePosition} onSelect={event => { setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd }); capturePosition() }} onChange={event => storeDraft({ ...entryRef.current, content: event.target.value, operationId: crypto.randomUUID() })} /><pre className="sn-preview" hidden={editing} aria-label={t(planning ? 'materialText' : 'body')}>{entry.content}</pre></>}
+          {entry && selection.end > selection.start && <Button size="sm" disabled={!writable || dirty || book.schemaVersion !== 2} title={t('selectionMaterialHint')} onClick={() => {
+            setSelectionMaterial({ start: selection.start, end: selection.end, sourceChapterId: chapterId, sourceHash: entry.diskHash, title: entry.content.slice(selection.start, Math.min(selection.end, selection.start + 20)), kind: 'seed', operationId: crypto.randomUUID(), chapterId: crypto.randomUUID(), quote: entry.content.slice(selection.start, selection.end), expectedRevision: book.revision })
+            openPane('selection-material')
+          }}>{t('selectionToMaterial')}</Button>}
           {entry && <div className="sn-editor-footer"><span>{characterCount} {t('characters')}</span><span>{t('saveShortcut')}</span></div>}
           </div>
           <div id="sn-panel-revisions" aria-labelledby="sn-tab-revisions" hidden={activeTab !== 'revisions'} role="tabpanel">
@@ -404,6 +412,18 @@ export function Books({ api, sessionId, t, setup }) {
         </>}
       </main>
     </div>}
+    {book && selectionMaterial && <WorkspacePanel id="sn-panel-selection-material" title={t('selectionToMaterial')} open={pane === 'selection-material'} close={closePane} t={t}>
+      <Input className="sn-input" aria-label={t('materialName')} value={selectionMaterial.title} onChange={event => setSelectionMaterial({ ...selectionMaterial, title: event.target.value })} />
+      <Select aria-label={t('referenceType')} value={selectionMaterial.kind} onChange={event => setSelectionMaterial({ ...selectionMaterial, kind: event.target.value })}>{materialKinds.map(kind => <option key={kind} value={kind}>{t(kind)}</option>)}</Select>
+      <pre className="sn-reference-text">{selectionMaterial.quote}</pre>
+      <Button size="sm" disabled={!writable || !selectionMaterial.title.trim()} onClick={() => action(async signal => {
+        await flushDraft()
+        const { quote: _quote, ...request } = selectionMaterial
+        applyBook(unwrap(await api.selectionMaterial(sessionId, { ...request, workspaceId: library.workspaceId, bookId }, signal)))
+        openPane('library')
+      })}>{t('confirmSelectionMaterial')}</Button>
+    </WorkspacePanel>}
+    {book && <WorkspacePanel id="sn-panel-library" title={t('materialLibrary')} open={pane === 'library'} close={closePane} t={t}><MaterialLibrary key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} writable={writable} t={t} changed={applyBook} edit={editReference} beforeGenerate={flushDraft} candidate={(id, proposalId) => { capturePosition(); setDocuments('materials'); setChapterId(id); setPreferredProposal(proposalId); setPane(''); setWorkTab('revisions') }} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-create-material" title={t('newMaterialWithAI')} open={pane === 'create-material'} close={closePane} t={t}><MaterialCreator key={`${library.workspaceId}:${bookId}`} active={pane === 'create-material'} api={api} sessionId={sessionId} book={book} workspaceId={library.workspaceId} writable={writable} t={t} onBusy={setBusy} created={materialCreated} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-materials" title={t('referenceList')} open={pane === 'materials'} close={closePane} t={t}><ReferencePanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} open={pane === 'materials'} writable={writable} t={t} edit={editReference} manage={manageMaterials} /></WorkspacePanel>}
     </div>
@@ -414,7 +434,7 @@ export function Books({ api, sessionId, t, setup }) {
       event.preventDefault(); buttons[next].focus(); buttons[next].click()
     }}>
       {[['writing', 'writingShort'], ['directory', 'directoryShort'], ['materials', 'materialsShort'], ['revisions', 'assistantShort'], ['management', 'moreShort']].map(([tab, label]) => {
-        const selected = pane ? pane === tab || pane === 'create-material' && tab === 'materials' : activeTab === tab || tab === 'management' && ['references', 'assessment'].includes(activeTab)
+        const selected = pane ? pane === tab || pane === 'create-material' && tab === 'materials' || pane === 'library' && tab === 'materials' : activeTab === tab || tab === 'management' && ['references', 'assessment'].includes(activeTab)
         return <Button size="sm" role="tab" key={tab} id={`sn-tab-${tab}`} aria-controls={`sn-panel-${tab}`} aria-selected={selected} tabIndex={selected ? 0 : -1} disabled={busy || tab !== 'management' && (!book || book.recoveryRequired) || tab === 'revisions' && !entry} onClick={() => tab === 'writing' ? showWriting() : tab === 'revisions' ? showTool('revisions') : pane === tab ? closePane() : openPane(tab)}>{t(label)}</Button>
       })}
     </nav>

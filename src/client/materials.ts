@@ -21,6 +21,6 @@ export function materialInstruction(kind, language) {
 }
 
 export function materialSources(book, targetId = '', includeChapters = false) {
-  return book.chapters.filter(item => item.chapterId !== targetId && item.kind !== 'facts' && item.kind !== 'voice' &&
+  return book.chapters.filter(item => item.chapterId !== targetId && !['archived', 'trashed'].includes(item.status) && item.kind !== 'facts' && item.kind !== 'voice' &&
     (includeChapters || item.kind && item.kind !== 'chapter'))
 }

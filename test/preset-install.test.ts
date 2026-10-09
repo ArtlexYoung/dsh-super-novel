@@ -41,7 +41,7 @@ test('unowned, modified, extra-file and different-version directories are never 
   assert.equal(await readFile(join(target, 'author.txt'), 'utf8'), 'keep me')
   await rm(target, { recursive: true })
   await f.installer.enable(signal())
-  const newer = new PresetInstaller(f.host, source, '0.2.0')
+  const newer = new PresetInstaller(f.host, source, '99.0.0')
   assert.equal((await newer.enable(signal())).reason, 'different-version-or-owner')
   await writeFile(join(target, 'agent.cordis.yml'), 'author edit\n')
   assert.equal((await f.installer.enable(signal())).reason, 'modified-preset')

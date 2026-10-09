@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { BookError, contentSchema, hash, idSchema, json } from '../domain/books.js'
+import { BookError, contentSchema, hash, idSchema, json, availableDocument } from '../domain/books.js'
 import { adoption, candidate, decisionSchema, generationPrompt, generationRequestSchema, parseProposal, proposalView, validateRange } from '../domain/proposals.js'
 import type { Proposal } from '../domain/proposals.js'
 import type { GenerateChapterRequest, GenerationUsage, ProposalDecisionRequest, ProposalSummary, ProposalView } from '../types.js'
@@ -70,10 +70,13 @@ export class ProposalStore {
       }
       validateRange(request, baseline)
       const context = []
-      const targetKind = chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind ?? 'chapter'
+      const targetDocument = chapter.book.chapters.find(item => item.chapterId === request.chapterId)!
+      if (!availableDocument(targetDocument)) throw new BookError('material-unavailable')
+      const targetKind = targetDocument.kind ?? 'chapter'
       for (const id of request.materialIds ?? []) {
         const selected = await this.books.readChapter(request.bookId, id)
         const document = selected.book.chapters.find(item => item.chapterId === id)!
+        if (!availableDocument(document)) throw new BookError('material-unavailable')
         const kind = document.kind ?? 'chapter'
         if (kind === 'facts' || kind === 'voice' || id === request.chapterId || kind === 'chapter' && targetKind === 'chapter') throw new BookError('invalid-material')
         if (selected.externallyModified || selected.book.revision !== request.expectedRevision) throw new BookError('revision-conflict')

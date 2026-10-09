@@ -11,10 +11,17 @@ export interface ChapterSummary {
   readonly hash: string
   readonly kind?: DocumentKind
   readonly linkedChapterId?: string
+  readonly tags?: readonly string[]
+  readonly aliases?: readonly string[]
+  readonly favorite?: boolean
+  readonly status?: 'active' | 'inbox' | 'archived' | 'trashed'
+  readonly linkedChapterIds?: readonly string[]
+  readonly relatedMaterialIds?: readonly string[]
+  readonly sourceEvidence?: MaterialSourceEvidence
 }
 export type DocumentKind = 'chapter' | 'seed' | 'book-card' | 'character' | 'world' | 'outline' | 'chapter-outline' | 'scene' | 'facts' | 'voice'
 export interface BookSnapshot {
-  readonly schemaVersion: 1
+  readonly schemaVersion: 1 | 2
   readonly bookId: string
   readonly title: string
   readonly revision: number
@@ -77,6 +84,8 @@ export interface ChapterMutationRequest {
   readonly expectedHash: string
   readonly kind?: DocumentKind
   readonly linkedChapterId?: string
+  readonly sourceEvidence?: MaterialSourceEvidence
+  readonly linkedChapterIds?: readonly string[]
 }
 
 export type ProposalMode = 'draft' | 'continue' | 'rewrite' | 'polish'
@@ -340,3 +349,23 @@ export interface BackupConfiguration { readonly workspaceId: string; readonly ro
 export interface RestoreBackupRequest extends BackupQuery { readonly manifestHash: string }
 
 export interface BackupHealth { readonly state: 'none' | 'verified' | 'failed'; readonly attemptedAt: number; readonly reason: string }
+
+export interface UpgradeBookRequest { readonly workspaceId: string; readonly bookId: string; readonly expectedRevision: number; readonly operationId: string; readonly backupId: string }
+export interface MaterialMetadataRequest {
+  readonly workspaceId: string; readonly bookId: string; readonly expectedRevision: number; readonly operationId: string; readonly chapterId: string
+  readonly tags: readonly string[]; readonly aliases: readonly string[]; readonly favorite: boolean
+  readonly status: 'active' | 'inbox' | 'archived' | 'trashed'; readonly linkedChapterIds: readonly string[]; readonly relatedMaterialIds: readonly string[]
+}
+export interface MaterialSearchRequest {
+  readonly bookId: string; readonly query: string; readonly kind: string; readonly tag: string; readonly status: string
+  readonly linkedChapterId: string; readonly favorite: boolean; readonly offset: number
+}
+export interface MaterialSearchResult { readonly items: readonly ChapterSummary[]; readonly total: number; readonly complete: boolean; readonly externalIds: readonly string[]; readonly revision: number }
+export interface MaterialReferences {
+  readonly linkedChapterIds: readonly string[]; readonly outgoing: readonly string[]; readonly incoming: readonly string[]
+  readonly uses: readonly { readonly proposalId: string; readonly chapterId: string; readonly revision: number; readonly hash: string; readonly stale: boolean; readonly state: string }[]
+  readonly evidenceChapterIds: readonly string[]; readonly draftBranches: number; readonly complete: boolean
+}
+
+export interface MaterialSourceEvidence { readonly chapterId: string; readonly revision: number; readonly hash: string; readonly quote: string; readonly start: number; readonly end: number }
+export interface SelectionMaterialRequest { readonly workspaceId: string; readonly bookId: string; readonly expectedRevision: number; readonly sourceChapterId: string; readonly sourceHash: string; readonly start: number; readonly end: number; readonly title: string; readonly kind: DocumentKind; readonly operationId: string; readonly chapterId: string }

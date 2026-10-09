@@ -10,7 +10,11 @@ import type { PresetStatus } from './types.js'
 import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, LibrarySnapshot } from './types.js'
 import { storageResult, workspaceBooks, workspaceAccess } from './host/workspace-books.js'
 import { StorageLocations, inside, libraryPath } from './host/storage-location.js'
+import { z } from 'zod'
+import { idSchema, titleSchema, materialKind } from './domain/books.js'
 import { BookError, hash } from './domain/books.js'
+import { MaterialCatalog } from './host/material-catalog.js'
+import type { UpgradeBookRequest, MaterialMetadataRequest, MaterialSearchRequest, MaterialSearchResult, MaterialReferences, SelectionMaterialRequest } from './types.js'
 import { BackupStore } from './host/backup-store.js'
 import type { BackupSettings, BackupSummary, BackupPreview, BackupHealth, BackupQuery, BackupConfiguration, RestoreBackupRequest } from './types.js'
 import { randomUUID } from 'node:crypto'
@@ -256,6 +260,61 @@ export class SuperNovel extends TypertRemoteService {
       const controller = this.ctx.get('sessionController')
       if (!controller?.workspaceDesktop().available) throw new BookError('native-open-unavailable')
       return await controller.openWorkspacePath({ path }, signal)
+    })
+  }
+
+  @Remote
+  async upgradeBook(sessionId: string, request: UpgradeBookRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      const backups = await BackupStore.at(scope.root)
+      await (await StorageLocations.at(scope.defaultRoot)).validate((await backups.settings()).root, scope.mode)
+      const book = await scope.store.readBook(request.bookId)
+      if (book.schemaVersion === 1) await backups.create(request.bookId, request.backupId, signal)
+      return await scope.store.upgrade(request.bookId, request.expectedRevision, request.operationId, signal)
+    })
+  }
+
+  @Remote
+  async updateMaterial(sessionId: string, request: MaterialMetadataRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      const result = await scope.store.metadata(request, signal)
+      this.scheduleBackup(scope.root, request.bookId, sessionId)
+      return result
+    })
+  }
+
+  @Remote
+  async searchMaterials(sessionId: string, request: MaterialSearchRequest, signal: AbortSignal): Promise<MaterialSearchResult> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await MaterialCatalog.at(scope.root, scope.store)).search(request, signal)
+    })
+  }
+
+  @Remote
+  async materialReferences(sessionId: string, bookId: string, chapterId: string, signal: AbortSignal): Promise<MaterialReferences> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await MaterialCatalog.at(scope.root, scope.store)).references(bookId, chapterId, signal)
+    })
+  }
+
+  @Remote
+  async selectionMaterial(sessionId: string, input: SelectionMaterialRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => {
+      const request = z.strictObject({ workspaceId: z.string(), bookId: idSchema, expectedRevision: z.int().positive(), sourceChapterId: idSchema, sourceHash: z.string(), start: z.int().nonnegative(), end: z.int().positive(), title: titleSchema, kind: z.string(), operationId: idSchema, chapterId: idSchema }).parse(input)
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      if (!materialKind(request.kind)) throw new BookError('invalid-material')
+      const source = await scope.store.readChapter(request.bookId, request.sourceChapterId), metadata = source.book.chapters.find(item => item.chapterId === request.sourceChapterId)!
+      if (source.book.schemaVersion !== 2) throw new BookError('migration-required')
+      if (source.book.revision !== request.expectedRevision || source.hash !== request.sourceHash || source.externallyModified) throw new BookError('revision-conflict')
+      if (request.end <= request.start || request.end > source.content.length) throw new BookError('invalid-evidence')
+      const quote = source.content.slice(request.start, request.end)
+      return await scope.store.mutate({ workspaceId: scope.workspaceId, operationId: request.operationId, bookId: request.bookId, expectedRevision: request.expectedRevision, chapterId: request.chapterId,
+        action: 'create', title: request.title, content: quote, expectedHash: '', beforeChapterId: '', kind: request.kind as SelectionMaterialRequest['kind'],
+        ...(!metadata.kind || metadata.kind === 'chapter' ? { linkedChapterIds: [request.sourceChapterId] } : {}), sourceEvidence: { chapterId: metadata.chapterId, revision: metadata.revision, hash: source.hash, quote, start: request.start, end: request.end } }, signal)
     })
   }
 

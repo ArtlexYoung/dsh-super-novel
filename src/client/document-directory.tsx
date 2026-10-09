@@ -6,11 +6,11 @@ import { materialKinds } from './materials.js'
 /** Filters affect navigation only; the selected draft remains mounted. */
 export function DocumentDirectory({ book, chapterId, documents, busy, search, setSearch, kind, setKind, linked, setLinked, page, setPage, select, switchDocuments, clear, children, t }) {
   const chapters = book.chapters.filter(item => !item.kind || item.kind === 'chapter')
-  const materials = book.chapters.filter(item => materialKinds.includes(item.kind))
+  const materials = book.chapters.filter(item => materialKinds.includes(item.kind) && !['archived', 'trashed'].includes(item.status))
   const visible = documents === 'chapters' ? chapters : materials
   const filtered = visible.filter(item => item.title.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()) &&
     (documents === 'chapters' || (kind === 'all' || item.kind === kind) &&
-      (linked === 'all' || (linked === 'unlinked' ? !item.linkedChapterId : item.linkedChapterId === linked))))
+      (linked === 'all' || (linked === 'unlinked' ? !item.linkedChapterId && !item.linkedChapterIds?.length : item.linkedChapterId === linked || item.linkedChapterIds?.includes(linked)))))
   const lastPage = Math.max(0, Math.ceil(filtered.length / 100) - 1)
   const currentPage = Math.min(page, lastPage)
   const active = book.chapters.find(item => item.chapterId === chapterId)
