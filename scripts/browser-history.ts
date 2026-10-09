@@ -4,12 +4,13 @@ import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
-import { openBookCreator, visitPreview } from './browser-workspace.ts'
+import { openBookCreator, visitPreview, createChapter, openManagement, showContent, waitForFixture, selectBook } from './browser-workspace.ts'
 const modulePath = process.env.PLAYWRIGHT_MODULE
 if (!modulePath) throw new Error('Provide the installed Playwright module path')
 const { chromium } = await import(pathToFileURL(resolve(modulePath)).href)
 const output = resolve(process.argv[2])
 const mode = process.argv[3] ?? 'workflow'
+await waitForFixture(output)
 const browser = await chromium.launch({ headless: true })
 const errors = []
 try {
@@ -45,33 +46,35 @@ try {
     await openBookCreator(page)
     await page.getByRole('textbox', { name: 'Book title', exact: true }).fill('历史渡河')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
-    await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第一章')
-    await page.getByRole('button', { name: 'New chapter', exact: true }).click()
+    await createChapter(page, '第一章')
     const original = '原稿。\n手腕还在疼。'
     await body.fill(original)
     await page.getByRole('button', { name: 'Save', exact: true }).click(); await saved()
     await body.fill('第二稿。')
     await page.getByRole('button', { name: 'Save', exact: true }).click(); await saved()
-    const [bookId] = (await readdir(join(root, 'novels'))).filter(name => /^[a-f0-9-]{36}$/.test(name))
+    const bookId = await page.locator('select[aria-label="Book"]').inputValue()
+    await writeFile(join(output, 'history-book-id'), bookId)
     const manifestPath = join(root, 'novels', bookId, 'project.json')
     const project = JSON.parse(await readFile(manifestPath, 'utf8'))
     const chapterId = project.chapters[0].chapterId
     const path = join(root, 'novels', bookId, 'chapters', `${chapterId}.md`)
     await body.fill('本地未保存稿。')
     await writeFile(path, '外部新稿。')
+    await openManagement(page)
     await page.locator('.sn-toolbar').getByRole('button', { name: 'Refresh', exact: true }).click()
-    await page.getByText('The draft baseline changed. Retain both drafts and compare before merging.', { exact: true }).waitFor()
+    await page.getByRole('alert').filter({ hasText: 'The draft baseline changed. Retain both drafts and compare before merging.' }).waitFor()
     await page.getByRole('button', { name: 'Retain both drafts', exact: true }).click()
     await page.getByLabel('Retained local draft', { exact: true }).waitFor()
     assert.equal(await page.getByLabel('Retained local draft', { exact: true }).textContent(), '本地未保存稿。')
     assert.equal(await page.getByLabel('Retained disk draft', { exact: true }).textContent(), '外部新稿。')
     await page.getByRole('textbox', { name: 'Merged text', exact: true }).fill('外部新稿。\n本地未保存稿。')
-    await page.getByRole('button', { name: 'Save merged draft', exact: true }).click(); await saved()
+    await page.getByRole('button', { name: 'Save merged draft', exact: true }).click(); await showContent(page); await saved()
     assert.equal(await readFile(path, 'utf8'), '外部新稿。\n本地未保存稿。')
+    await openManagement(page)
     await page.getByText('Chapter history and recovery', { exact: true }).click()
     await page.getByRole('combobox', { name: 'Saved version', exact: true }).selectOption({ label: 'Revision 2 · Save' })
     assert.equal(await page.getByLabel('Historical text', { exact: true }).textContent(), original)
-    await page.getByRole('button', { name: 'Restore as new revision', exact: true }).click(); await saved()
+    await page.getByRole('button', { name: 'Restore as new revision', exact: true }).click(); await showContent(page); await saved()
     await page.waitForFunction(expected => document.querySelector('textarea[aria-label="Chapter text"]')?.value === expected, original)
     assert.equal(await readFile(path, 'utf8'), original)
     const { BookStore } = await import(pathToFileURL(join(output, 'home/profiles/web/node_modules/dsh-super-novel/lib/host/book-store.js')).href)
@@ -80,22 +83,26 @@ try {
     await assert.rejects(broken.mutate({ operationId: randomUUID(), bookId, chapterId, expectedRevision: current.book.revision,
       action: 'save', title: '', beforeChapterId: '', content: '计划保存稿。', expectedHash: current.hash }, new AbortController().signal))
     await writeFile(path, '中断后作者新稿。')
+    await openManagement(page)
     await page.locator('.sn-toolbar').getByRole('button', { name: 'Refresh', exact: true }).click()
     await page.getByRole('button', { name: 'Recover interrupted save', exact: true }).click()
     await page.getByText('Recovery found new external content. Files and journals were retained. Back up before resolving.', { exact: true }).waitFor()
     await page.getByText('Interrupted save drafts', { exact: true }).click()
     await page.getByRole('button', { name: 'Review recovery drafts', exact: true }).click()
     await page.getByRole('textbox', { name: 'Confirmed recovery text', exact: true }).fill('中断后作者新稿。\n计划保存稿。')
-    await page.getByRole('button', { name: 'Confirm text and finish recovery', exact: true }).click(); await saved()
+    await page.getByRole('button', { name: 'Confirm text and finish recovery', exact: true }).click(); await showContent(page); await saved()
     assert.equal(await readFile(path, 'utf8'), '中断后作者新稿。\n计划保存稿。')
     assert.equal((await readdir(join(root, 'novels', bookId, 'recoveries'))).length, 1)
   } else {
+    await selectBook(page, await readFile(join(output, 'history-book-id'), 'utf8'))
     await body.waitFor()
     assert.equal(await body.inputValue(), '中断后作者新稿。\n计划保存稿。')
+    await openManagement(page)
     await page.getByText('Chapter history and recovery', { exact: true }).click()
     await page.getByRole('combobox', { name: 'Saved version', exact: true }).waitFor()
     assert.equal(await page.getByRole('combobox', { name: 'Saved version', exact: true }).locator('option').count(), 7)
   }
+  await openManagement(page)
   await mkdir(join(output, 'screenshots'), { recursive: true })
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click()
   await page.setViewportSize({ width: 900, height: 800 })

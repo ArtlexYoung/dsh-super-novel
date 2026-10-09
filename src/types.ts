@@ -27,6 +27,35 @@ export interface LibrarySnapshot {
   readonly writable: boolean
   readonly books: readonly BookSnapshot[]
 }
+export interface StorageLocation {
+  readonly root: string
+  readonly path: string
+  readonly defaultRoot: string
+  readonly workspaceId: string
+  readonly previousRoots: readonly string[]
+  readonly writable: boolean
+  readonly canPick: boolean
+  readonly canOpen: boolean
+  readonly canChange: boolean
+}
+export interface ChangeStorageLocationRequest { readonly root: string; readonly expectedWorkspaceId: string }
+export interface PickStorageLocation { readonly selected: boolean; readonly root: string }
+export interface DraftRequest {
+  readonly workspaceId: string; readonly bookId: string; readonly chapterId: string
+  readonly branchId: string; readonly sequence: number; readonly baseHash: string
+  readonly bookRevision: number; readonly content: string; readonly operationId: string
+}
+export interface DraftSummary {
+  readonly workspaceId: string; readonly bookId: string; readonly chapterId: string
+  readonly branchId: string; readonly sequence: number; readonly baseHash: string
+  readonly bookRevision: number; readonly contentHash: string; readonly savedAt: number
+  readonly operationId: string
+}
+export interface DiskDraft extends DraftSummary { readonly content: string }
+export interface DraftListing { readonly drafts: readonly DraftSummary[]; readonly unreadable: number }
+export interface DraftQuery { readonly workspaceId: string; readonly bookId: string; readonly chapterId: string }
+export interface DraftVersionQuery extends DraftQuery { readonly branchId: string; readonly sequence: number }
+export interface SettleDraftRequest extends DraftVersionQuery { readonly contentHash: string; readonly action: 'saved' | 'dismissed' }
 export interface ChapterText {
   readonly book: BookSnapshot
   readonly chapterId: string
@@ -36,6 +65,7 @@ export interface ChapterText {
 }
 export interface CreateBookRequest { readonly operationId: string; readonly title: string }
 export interface ChapterMutationRequest {
+  readonly workspaceId?: string
   readonly operationId: string
   readonly bookId: string
   readonly expectedRevision: number

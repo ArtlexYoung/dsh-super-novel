@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { withWorkspace, openBookCreator, openGeneration, openHostSettings } from './browser-workspace.ts'
+import { withWorkspace, openBookCreator, openGeneration, openHostSettings, selectBook, openDirectory, createChapter, selectDocumentType, openMaterialCreator, openWritingTool } from './browser-workspace.ts'
 
 export async function checkWritingWorkflow(page, output, mode = 'workflow', resize = size => page.setViewportSize(size)) {
   const exitFullscreen = page.getByRole('button', { name: 'Exit fullscreen', exact: true })
@@ -13,7 +13,7 @@ export async function checkWritingWorkflow(page, output, mode = 'workflow', resi
   const body = page.locator('textarea[aria-label="Chapter text"]'), tabs = page.locator('.sn-work-tabs')
   const material = page.getByRole('textbox', { name: 'Material text', exact: true })
   const proposals = page.locator('.sn-proposals'), reviews = page.locator('.sn-reviews'), facts = page.locator('.sn-facts')
-  const tab = id => page.locator(`#sn-tab-${id}`).click()
+  const tab = id => ['references', 'assessment'].includes(id) ? openWritingTool(page, id) : page.locator(`#sn-tab-${id}`).click()
   const savedText = async text => {
     await body.fill(text); await page.getByRole('button', { name: 'Save', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('.sn-editor-toolbar [role=status]')?.textContent === 'Saved')
@@ -22,10 +22,11 @@ export async function checkWritingWorkflow(page, output, mode = 'workflow', resi
   if (mode === 'workflow') {
     await openBookCreator(page)
     await page.getByLabel('Book title', { exact: true }).fill('完整渡河'); await page.getByRole('button', { name: 'New book', exact: true }).click()
-    await page.getByLabel('Chapter title', { exact: true }).fill('第一章'); await page.getByRole('button', { name: 'New chapter', exact: true }).click(); await body.waitFor()
+    await createChapter(page, '第一章'); await body.waitFor()
     const bookId = await page.getByLabel('Book', { exact: true }).inputValue()
     assert(bookId)
-    await page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name: 'Materials and plans', exact: true }).click()
+    await selectDocumentType(page, 'Materials and plans')
+    await openMaterialCreator(page)
     await page.getByLabel('Material type', { exact: true }).selectOption('chapter-outline')
     await page.getByLabel('Related chapter', { exact: true }).selectOption({ label: '第一章' })
     await page.getByLabel('Material name', { exact: true }).fill('渡河章纲'); await page.getByRole('button', { name: 'Create template', exact: true }).click(); await material.waitFor()
@@ -35,7 +36,7 @@ export async function checkWritingWorkflow(page, output, mode = 'workflow', resi
     await proposals.getByLabel('Writing instructions', { exact: true }).fill('将要求写成可执行章纲。')
     await proposals.getByRole('button', { name: 'Generate', exact: true }).click(); await ready(); await proposals.getByRole('button', { name: 'Accept', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Material text"]')?.value.includes('候选前句'))
-    await page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name: 'Chapters', exact: true }).click()
+    await selectDocumentType(page, 'Chapters')
     await openGeneration(page); await proposals.getByText('Select saved materials', { exact: true }).click()
     await proposals.getByRole('checkbox', { name: /渡河章纲 · Chapter outline/ }).check()
     await proposals.getByLabel('Writing instructions', { exact: true }).fill('依据章纲起草。[review-problem]')
@@ -58,7 +59,7 @@ export async function checkWritingWorkflow(page, output, mode = 'workflow', resi
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Chapter text"]')?.value.includes('后文保持。') && !document.querySelector('textarea[aria-label="Chapter text"]')?.value.includes('[TODO]'))
     await tab('references'); await facts.getByRole('button', { name: 'Extract fact candidate', exact: true }).click()
     await facts.getByRole('button', { name: 'Accept facts', exact: true }).click(); await facts.getByText('Chapter facts accepted', { exact: true }).waitFor()
-    await page.getByLabel('Chapter title', { exact: true }).fill('第二章'); await page.getByRole('button', { name: 'New chapter', exact: true }).click()
+    await createChapter(page, '第二章')
     await page.waitForFunction(() => document.querySelector('input[aria-label="Rename"]')?.value === '第二章' && document.querySelector('textarea[aria-label="Chapter text"]')?.value === '')
     await openGeneration(page)
     await proposals.getByRole('checkbox', { name: 'Use previous chapter facts', exact: true }).check(); await proposals.getByText(/Fact context complete/).waitFor()
@@ -71,7 +72,8 @@ export async function checkWritingWorkflow(page, output, mode = 'workflow', resi
     assert.equal(await calls() - before, 8)
     await writeFile(targetPath, bookId)
   } else {
-    await page.getByLabel('Book', { exact: true }).selectOption(await readFile(targetPath, 'utf8'))
+    await selectBook(page, await readFile(targetPath, 'utf8'))
+    await openDirectory(page)
     await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click(); await tab('writing'); await body.waitFor(); assert((await body.inputValue()).includes('左腕仍藏在袖中'))
     await tab('revisions'); await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Incomplete$/ }).waitFor()
     await openGeneration(page)

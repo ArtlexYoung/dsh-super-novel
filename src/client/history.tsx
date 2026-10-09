@@ -36,7 +36,7 @@ export function InterruptedRecovery({ api, sessionId, bookId, writable, t, saved
   </details>
 }
 
-export function ChapterRecovery({ api, sessionId, book, chapterId, entry, writable, dirty, stale, t, saved, onBusy }) {
+export function ChapterRecovery({ api, sessionId, book, chapterId, entry, writable, dirty, stale, t, saved, onBusy, beforeChange }) {
   const [history, setHistory] = useState([])
   const [version, setVersion] = useState(null)
   const [conflicts, setConflicts] = useState([])
@@ -87,8 +87,9 @@ export function ChapterRecovery({ api, sessionId, book, chapterId, entry, writab
     action(async signal => {
       const request = { bookId: book.bookId, chapterId, sourceOperationId: version.operationId, expectedSourceHash: version.hash,
         expectedRevision: book.revision, expectedHash: entry.diskHash }
+      await beforeChange()
       unwrap(await api.restoreChapter(sessionId, { ...request, operationId: identity(request) }, signal))
-      if (live.current) saved()
+      if (live.current) await saved()
     })
   }
   const resolve = choice => {
@@ -96,8 +97,9 @@ export function ChapterRecovery({ api, sessionId, book, chapterId, entry, writab
     action(async signal => {
       const request = { bookId: book.bookId, conflictId, expectedRevision: book.revision, expectedHash: entry.diskHash,
         choice, mergedContent: choice === 'merged' ? merged : '' }
+      await beforeChange()
       unwrap(await api.resolveConflict(sessionId, { ...request, operationId: identity(request) }, signal))
-      if (live.current) saved()
+      if (live.current) await saved()
     })
   }
   return <section className="sn-history" aria-label={t('history')}>

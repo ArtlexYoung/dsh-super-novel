@@ -31,12 +31,11 @@ function Setup({ api, sessionId, t }) {
   }
   const status = state.kind === 'ready' ? state.value.state : state.kind
   return <div className="super-novel-setup">
-    <Books key={sessionId} api={api} sessionId={sessionId} t={t} />
-    <details className="sn-setup"><summary>{t('setup')}</summary>
+    <Books key={sessionId} api={api} sessionId={sessionId} t={t} setup={<details className="sn-setup"><summary>{t('setup')}</summary>
     <p role={status === 'error' || status === 'conflict' ? 'alert' : 'status'}>{t(status)}</p>
     {(status === 'available' || status === 'incomplete') && <Button size="sm" onClick={enable}>{t(status === 'incomplete' ? 'resume' : 'enable')}</Button>}
     {status !== 'working' && status !== 'loading' && <Button size="sm" onClick={() => setRefresh(value => value + 1)}>{t('refresh')}</Button>}
-    </details>
+    </details>} />
   </div>
 }
 function TabTitle({ t }) { return <span>{t('title')}</span> }

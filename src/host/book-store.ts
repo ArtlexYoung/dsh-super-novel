@@ -9,6 +9,7 @@ import { parseFactDocument, validateFacts } from '../domain/facts.js'
 
 const ROOT = 'novels'
 const mutationSchema = z.strictObject({
+  workspaceId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   operationId: idSchema, bookId: idSchema, expectedRevision: z.int().positive(),
   action: z.enum(['create', 'rename', 'move', 'save']), chapterId: idSchema,
   title: z.string().max(200), beforeChapterId: z.union([idSchema, z.literal('')]),

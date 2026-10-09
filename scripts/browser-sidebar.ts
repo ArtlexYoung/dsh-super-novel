@@ -3,7 +3,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { withWorkspace, showContent, openGeneration, openDocumentOptions, openHostSettings } from './browser-workspace.ts'
+import { withWorkspace, showContent, openGeneration, openDocumentOptions, openHostSettings, openDirectory, openManagement, selectBook, openMaterialCreator, resizeSidebar } from './browser-workspace.ts'
 
 /** A mixed directory exercises pagination and links without calling a provider. */
 export async function createSidebarFixture(output) {
@@ -36,7 +36,7 @@ export async function checkSidebar(page, output, identity, resize = size => page
   const exitFullscreen = page.getByRole('button', { name: 'Exit fullscreen', exact: true })
   if (await exitFullscreen.isVisible()) await exitFullscreen.click()
   const directory = page.locator('.sn-directory'), content = page.locator('.sn-document'), materials = page.locator('textarea[aria-label="Material text"]')
-  const tab = name => page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name, exact: true }).click()
+  const tab = async name => { await openDirectory(page); await page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name, exact: true }).click() }
   const creator = page.locator('.sn-material-creator'), panel = page.locator('.sn-proposals')
   const calls = async () => JSON.parse(await readFile(join(output, 'generation-calls.json'), 'utf8').catch(() => '[]')).length
   const before = await calls()
@@ -50,20 +50,12 @@ export async function checkSidebar(page, output, identity, resize = size => page
     assert(await content.evaluate(el => el.scrollWidth <= el.clientWidth + 1))
   }
   const narrow = async width => {
-    const handle = page.locator('[data-side="rightbar"]')
-    await handle.hover({ position: { x: 1, y: 20 } })
-    const box = await handle.boundingBox()
-    assert(box, 'Host right-sidebar resize handle must be available')
-    const viewport = await page.evaluate(() => innerWidth)
-    // The panel overlays the handle's right half. Grab its exposed left edge.
-    const currentWidth = await page.locator('.super-novel-setup').evaluate(el => el.clientWidth)
-    const startX = box.x + 1, offset = startX - (viewport - currentWidth)
-    await page.mouse.move(startX, box.y + 20); await page.mouse.down()
-    await page.mouse.move(viewport - width + offset, box.y + 20, { steps: 8 }); await page.mouse.up()
+    await resizeSidebar(page, width)
     await checkWidth(width, 1)
   }
+  await openManagement(page)
   await page.getByRole('button', { name: 'Refresh', exact: true }).first().click()
-  await page.getByLabel('Book', { exact: true }).selectOption(identity.bookId)
+  await selectBook(page, identity.bookId)
   await tab('Materials and plans')
   if (!await directory.evaluate(el => el.open)) await directory.locator(':scope > summary').click()
   await page.locator('.sn-chapters button').first().waitFor()
@@ -79,6 +71,7 @@ export async function checkSidebar(page, output, identity, resize = size => page
   await page.locator('.sn-chapters button').click(); await titleIs('资料 scene 01')
   await page.waitForFunction(() => document.querySelector('textarea[aria-label="Material text"]')?.value === '已保存 scene 1。')
   await materials.fill('缩放中保留的未保存素材草稿。')
+  await openDirectory(page)
   await page.getByLabel('Filter material type', { exact: true }).selectOption('world')
   await directory.getByText('No matching documents. Adjust or clear the filters.', { exact: true }).waitFor()
   assert.equal(await materials.inputValue(), '缩放中保留的未保存素材草稿。')
@@ -90,26 +83,24 @@ export async function checkSidebar(page, output, identity, resize = size => page
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click()
   await resize({ width: 1440, height: 1000 })
   await narrow(300)
-  await materials.scrollIntoViewIfNeeded(); assert.equal(await materials.inputValue(), '缩放中保留的未保存素材草稿。')
-  await directory.locator(':scope > summary').click()
-  assert(!await directory.evaluate(el => el.open))
+  await showContent(page); assert.equal(await materials.inputValue(), '缩放中保留的未保存素材草稿。')
   await materials.scrollIntoViewIfNeeded(); await page.screenshot({ path: join(output, 'sidebar-300-en-light.png') })
-  await directory.locator(':scope > summary').click(); await narrow(420)
+  await narrow(420)
   assert.equal(await materials.inputValue(), '缩放中保留的未保存素材草稿。')
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click(); await resize({ width: 900, height: 800 }); await checkWidth(900, 2)
   const directoryTop = await directory.evaluate(el => el.getBoundingClientRect().top)
   await content.evaluate(el => { el.scrollTop = el.scrollHeight })
   assert.equal(await directory.evaluate(el => el.getBoundingClientRect().top), directoryTop)
-  assert(await page.locator('.sn-work-tabs').evaluate(el => el.getBoundingClientRect().top >= el.closest('.sn-document').getBoundingClientRect().top))
+  assert(await page.locator('.sn-work-tabs').evaluate(el => el.getBoundingClientRect().top >= el.closest('.sn-books').getBoundingClientRect().top))
   assert.equal(await materials.inputValue(), '缩放中保留的未保存素材草稿。')
   await openDocumentOptions(page)
-  await page.getByRole('button', { name: 'Read disk version', exact: true }).click()
+  await page.getByRole('button', { name: 'Read disk version', exact: true }).click(); await showContent(page)
   await page.waitForFunction(() => document.querySelector('textarea[aria-label="Material text"]')?.value === '已保存 scene 1。')
   if (mode === 'workflow') {
     // Creation resets both filters; the generated target remains visible at 300px and fullscreen.
     await page.getByLabel('Filter material type', { exact: true }).selectOption('world')
     await page.getByLabel('Filter related chapter', { exact: true }).selectOption(identity.proseId)
-    if (!await creator.evaluate(el => el.open)) await creator.locator(':scope > summary').click()
+    await openMaterialCreator(page)
     await creator.getByLabel('Material type', { exact: true }).selectOption('character')
     await creator.getByLabel('Material name', { exact: true }).fill('侧栏新人物')
     await creator.getByRole('button', { name: 'Generate material with AI', exact: true }).click()
@@ -151,6 +142,7 @@ export async function checkSidebar(page, output, identity, resize = size => page
   // The fullscreen pane covers the host rail; open host settings in docked mode.
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click()
   await resize({ width: 1440, height: 1000 })
+  await openDirectory(page)
   await openHostSettings(page); await page.getByRole('button', { name: 'Dark', exact: true }).click(); await page.getByRole('button', { name: 'English', exact: true }).click(); await page.getByText('中文', { exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click()
   await page.getByLabel('筛选资料类型', { exact: true }).waitFor()
   await page.getByRole('button', { name: '全屏', exact: true }).click()

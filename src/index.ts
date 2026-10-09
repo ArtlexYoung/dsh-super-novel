@@ -1,13 +1,19 @@
 /** Host service and browser discovery entry for the novel-generation bundle. */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { lstat } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent-presets'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { createPresetSetup } from './host/preset-setup.js'
 import type { PresetStatus } from './types.js'
 import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, LibrarySnapshot } from './types.js'
-import { storageResult, workspaceBooks } from './host/workspace-books.js'
+import { storageResult, workspaceBooks, workspaceAccess } from './host/workspace-books.js'
+import { StorageLocations, inside, libraryPath } from './host/storage-location.js'
+import { BookError, hash } from './domain/books.js'
+import { DraftStore } from './host/draft-store.js'
+import { BookFiles } from './host/book-files.js'
+import type { StorageLocation, ChangeStorageLocationRequest, PickStorageLocation, DraftQuery, DraftRequest, DraftSummary, DraftVersionQuery, DiskDraft, SettleDraftRequest, DraftListing } from './types.js'
 import type { GenerateChapterRequest, ProposalDecisionRequest, ProposalSummary, ProposalView } from './types.js'
 import { ProposalStore } from './host/proposal-store.js'
 import { ProposalTasks } from './host/proposal-tasks.js'
@@ -82,6 +88,102 @@ export class SuperNovel extends TypertRemoteService {
     })
   }
 
+  /** Inspect the selected library, even when its removable disk is unavailable. */
+  @Remote
+  async storageLocation(sessionId: string, signal: AbortSignal): Promise<StorageLocation> {
+    return await storageResult(async () => {
+      const access = await workspaceAccess(this.ctx, sessionId, signal)
+      const location = await (await StorageLocations.at(access.root)).read()
+      const picker = this.ctx.get('directoryPicker') as { capability(): { kind: string } } | undefined
+      const controller = this.ctx.get('sessionController')
+      return { ...location, defaultRoot: access.root, path: libraryPath(location.root), workspaceId: hash(location.root),
+        writable: access.mode !== 'read-only' && (access.mode === 'danger-full-access' || inside(access.root, location.root)),
+        canChange: access.mode !== 'read-only', canPick: picker?.capability().kind === 'native', canOpen: typeof controller?.workspaceDesktop === 'function' && controller.workspaceDesktop().available }
+    })
+  }
+
+  /** Explicitly switch libraries; old data and in-flight tasks stay at their original root. */
+  @Remote
+  async changeStorageLocation(sessionId: string, request: ChangeStorageLocationRequest, signal: AbortSignal): Promise<StorageLocation> {
+    return await storageResult(async () => {
+      const access = await workspaceAccess(this.ctx, sessionId, signal)
+      const locations = await StorageLocations.at(access.root)
+      await locations.validate(request.root, access.mode)
+      const fs = this.ctx.get('fs')
+      if (!fs) throw new BookError('host-unavailable')
+      const target = await fs.resolve(request.root, { signal })
+      if (fs.processPathFromHostPath(request.root) !== request.root || fs.processPath(target) !== request.root) throw new BookError('local-only')
+      await locations.change(request.root, request.expectedWorkspaceId, access.mode, signal)
+      return await this.storageLocation(sessionId, signal)
+    })
+  }
+
+  /** Use the host's native chooser when present; cancellation is an explicit result. */
+  @Remote
+  async pickStorageLocation(sessionId: string, signal: AbortSignal): Promise<PickStorageLocation> {
+    return await storageResult(async () => {
+      const access = await workspaceAccess(this.ctx, sessionId, signal)
+      if (access.mode === 'read-only') throw new BookError('read-only')
+      const picker = this.ctx.get('directoryPicker') as { capability(): { kind: string; pick?: (signal: AbortSignal) => Promise<string | null> } } | undefined
+      const capability = picker?.capability()
+      if (capability?.kind !== 'native' || !capability.pick) throw new BookError('directory-picker-unavailable')
+      const root = await capability.pick(signal)
+      return { selected: root !== null, root: root ?? '' }
+    })
+  }
+
+  /** Open only the selected library root via the host's existing native opener. */
+  @Remote
+  async openStorageLocation(sessionId: string, expectedWorkspaceId: string, signal: AbortSignal): Promise<{ opened: boolean }> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      if (scope.workspaceId !== expectedWorkspaceId) throw new BookError('location-changed')
+      const controller = this.ctx.get('sessionController')
+      if (typeof controller?.openWorkspacePath !== 'function' || !controller.workspaceDesktop().available) throw new BookError('native-open-unavailable')
+      const path = await (await BookFiles.at(scope.root)).path('novels')
+      let selected = path
+      try { if (!(await lstat(path)).isDirectory()) throw new BookError('unsafe-path') }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') selected = scope.root; else throw error }
+      return await controller.openWorkspacePath({ path: selected }, signal)
+    })
+  }
+
+  /** Checkpoints are independent from formal chapter revisions and AI adoption. */
+  @Remote
+  async checkpointDraft(sessionId: string, request: DraftRequest, signal: AbortSignal): Promise<DraftSummary> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await (await DraftStore.at(scope.root, scope.workspaceId, scope.store)).put(request, signal)
+    })
+  }
+
+  /** Read recoverable editor branches without creating storage. */
+  @Remote
+  async chapterDrafts(sessionId: string, query: DraftQuery, signal: AbortSignal): Promise<DraftListing> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await DraftStore.at(scope.root, scope.workspaceId, scope.store)).list(query)
+    })
+  }
+
+  /** Preview one immutable checkpoint. */
+  @Remote
+  async readDraft(sessionId: string, query: DraftVersionQuery, signal: AbortSignal): Promise<DiskDraft> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await DraftStore.at(scope.root, scope.workspaceId, scope.store)).read(query)
+    })
+  }
+
+  /** Retain history while resolving exactly the reviewed checkpoint. */
+  @Remote
+  async settleDraft(sessionId: string, request: SettleDraftRequest, signal: AbortSignal): Promise<DraftSummary> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      return await (await DraftStore.at(scope.root, scope.workspaceId, scope.store)).settle(request, signal)
+    })
+  }
+
   /** Create a book under the Session's workspace after an explicit user action. */
   @Remote
   async createBook(sessionId: string, request: CreateBookRequest, signal: AbortSignal): Promise<BookSnapshot> {
@@ -97,7 +199,11 @@ export class SuperNovel extends TypertRemoteService {
   /** Version-checked manual chapter changes; repeated operation IDs are idempotent. */
   @Remote
   async changeChapter(sessionId: string, request: ChapterMutationRequest, signal: AbortSignal): Promise<BookSnapshot> {
-    return await storageResult(async () => (await workspaceBooks(this.ctx, sessionId, true, signal)).store.mutate(request, signal))
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      if (request.workspaceId && scope.workspaceId !== request.workspaceId) throw new BookError('location-changed')
+      return await scope.store.mutate(request, signal)
+    })
   }
 
   /** Explicitly settle an interrupted save; a third version is never overwritten. */

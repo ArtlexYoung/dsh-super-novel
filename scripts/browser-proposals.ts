@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { openBookCreator, showContent, openGeneration, openDocumentOptions, visitPreview } from './browser-workspace.ts'
+import { openBookCreator, showContent, openGeneration, openDocumentOptions, visitPreview, createChapter } from './browser-workspace.ts'
 const modulePath = process.env.PLAYWRIGHT_MODULE
 if (!modulePath) throw new Error('Provide the installed Playwright module path')
 const { chromium } = await import(pathToFileURL(resolve(modulePath)).href)
@@ -51,8 +51,7 @@ try {
     await openBookCreator(page)
     await page.getByRole('textbox', { name: 'Book title', exact: true }).fill('渡河提案')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
-    await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第一章')
-    await page.getByRole('button', { name: 'New chapter', exact: true }).click()
+    await createChapter(page, '第一章')
     await body.waitFor()
     const original = '前文保持。\n\n选中段。\n\n后文保持。'
     await body.fill(original)
@@ -97,7 +96,7 @@ try {
     await panel.getByRole('alert').waitFor()
     assert.equal(await readFile(path, 'utf8'), expected + '\n作者外部新稿。')
     await openDocumentOptions(page)
-    await page.getByRole('button', { name: 'Read disk version', exact: true }).click()
+    await page.getByRole('button', { name: 'Read disk version', exact: true }).click(); await showContent(page)
     await page.waitForFunction(expected => document.querySelector('textarea[aria-label="Chapter text"]')?.value === expected, expected + '\n作者外部新稿。')
     await body.fill(expected)
     await page.getByRole('button', { name: 'Save', exact: true }).click()

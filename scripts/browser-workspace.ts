@@ -35,7 +35,73 @@ export async function visitPreview(page, output) {
 
 /** Follow the visible navigation used by authors; do not fill collapsed forms. */
 export async function openBookCreator(page) {
+  await openManagement(page)
   if (!await page.getByLabel('Book title', { exact: true }).isVisible()) await page.locator('.sn-book-picker button').click()
+}
+
+export async function openManagement(page) {
+  await page.locator('.sn-book-picker').waitFor({ state: 'attached' })
+  if (!await page.locator('#sn-panel-management').isVisible()) await page.locator('.sn-project-title').click()
+  await page.locator('#sn-panel-management').waitFor()
+}
+
+export async function selectBook(page, option) {
+  await openManagement(page)
+  await page.getByLabel('Book', { exact: true }).selectOption(option)
+  await showContent(page)
+}
+
+export async function openDirectory(page) {
+  const directory = page.locator('#sn-panel-directory')
+  if (!await directory.isVisible() || await directory.getAttribute('inert') !== null) await page.locator('#sn-tab-directory').click()
+  await page.locator('#sn-panel-directory').waitFor()
+}
+
+export async function createChapter(page, title) {
+  await openDirectory(page)
+  const documents = page.getByRole('tablist', { name: 'Book documents', exact: true })
+  if (await documents.getByRole('tab', { name: 'Chapters', exact: true }).getAttribute('aria-selected') !== 'true') await documents.getByRole('tab', { name: 'Chapters', exact: true }).click()
+  await page.getByLabel('Chapter title', { exact: true }).fill(title)
+  await page.getByRole('button', { name: 'New chapter', exact: true }).click()
+  await page.waitForFunction(title => document.querySelector('input[aria-label="Rename"]')?.value === title && document.querySelector('.sn-editor'), title)
+  await showContent(page)
+}
+
+/** A directory category is navigation only; explicitly select the first document. */
+export async function selectDocumentType(page, name) {
+  await openDirectory(page)
+  await page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name, exact: true }).click()
+  const first = page.locator('.sn-chapters button').first()
+  if (await first.count()) await first.click()
+}
+
+export async function openMaterialCreator(page) {
+  if (!await page.locator('#sn-panel-create-material').isVisible()) {
+    await openDirectory(page)
+    await page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name: 'Materials and plans', exact: true }).click()
+    await page.getByRole('button', { name: 'New writing material', exact: true }).click()
+  }
+  await page.locator('#sn-panel-create-material .sn-material-creator[open]').waitFor()
+}
+
+export async function openWritingTool(page, tool) {
+  await openManagement(page)
+  await page.locator(`#sn-tab-${tool}`).click()
+  await page.locator(`#sn-panel-${tool}`).waitFor()
+}
+
+/** Resize the host's real sidebar using its exposed drag handle. */
+export async function resizeSidebar(page, width) {
+  const handle = page.locator('[data-side="rightbar"]')
+  await handle.hover({ position: { x: 1, y: 20 } })
+  const box = await handle.boundingBox()
+  assert(box, 'Host right-sidebar resize handle must be available')
+  const viewport = await page.evaluate(() => innerWidth)
+  const current = await page.locator('.super-novel-setup').evaluate(element => element.clientWidth)
+  const x = box.x + 1, offset = x - (viewport - current)
+  await page.mouse.move(x, box.y + 20); await page.mouse.down()
+  await page.mouse.move(viewport - width + offset, box.y + 20, { steps: 8 }); await page.mouse.up()
+  await page.waitForFunction(width => Math.abs(document.querySelector('.super-novel-setup').clientWidth - width) < 3, width)
 }
 
 export async function showContent(page) {
@@ -50,7 +116,7 @@ export async function openGeneration(page) {
 }
 
 export async function openDocumentOptions(page) {
-  await showContent(page)
+  await openManagement(page)
   const options = page.locator('.sn-document-options')
   if (!await options.evaluate(element => element.open)) await options.locator(':scope > summary').click()
 }
@@ -71,7 +137,8 @@ export async function withWorkspace(output, run) {
   const browser = await chromium.launch({ headless: true })
   const errors = []
   try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    const page = await context.newPage()
     page.setDefaultTimeout(20_000)
     page.on('pageerror', error => errors.push(error.message))
     page.on('dialog', dialog => dialog.accept())

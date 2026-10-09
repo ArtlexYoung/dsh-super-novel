@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { withWorkspace, openBookCreator, showContent, openGeneration, openDocumentOptions } from './browser-workspace.ts'
+import { withWorkspace, openBookCreator, showContent, openGeneration, openDocumentOptions, selectBook, openDirectory, createChapter, selectDocumentType, openMaterialCreator } from './browser-workspace.ts'
 
 const output = resolve(process.argv[2]), mode = process.argv[3] ?? 'workflow'
 const calls = async () => JSON.parse(await readFile(join(output, 'generation-calls.json'), 'utf8').catch(() => '[]'))
@@ -14,14 +14,13 @@ await withWorkspace(output, async page => {
   const creator = page.locator('.sn-material-creator'), panel = page.locator('.sn-proposals')
   const body = page.getByRole('textbox', { name: 'Chapter text', exact: true })
   const material = page.locator('textarea[aria-label="Material text"]')
-  const tab = name => page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name, exact: true }).click()
-  const openCreator = async () => { if (!await creator.evaluate(element => element.open)) await creator.locator(':scope > summary').click() }
+  const tab = name => selectDocumentType(page, name)
+  const openCreator = () => openMaterialCreator(page)
   const openSources = async () => { const details = creator.locator('details'); if (!await details.evaluate(element => element.open)) await details.locator('summary').click() }
   const ready = () => panel.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Ready for review$/ }).waitFor()
   const titleIs = title => page.waitForFunction(name => document.querySelector('input[aria-label="Rename"]')?.value === name, title)
   const chooseChapter = async name => {
-    await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill(name)
-    await page.getByRole('button', { name: 'New chapter', exact: true }).click(); await titleIs(name); await body.waitFor()
+    await createChapter(page, name); await titleIs(name); await body.waitFor()
   }
   let identity
   if (mode === 'workflow') {
@@ -87,7 +86,7 @@ await withWorkspace(output, async page => {
     await openGeneration(page)
     assert(await panel.getByRole('button', { name: 'Generate', exact: true }).isDisabled())
     await openDocumentOptions(page)
-    await page.getByRole('button', { name: 'Read disk version', exact: true }).click()
+    await page.getByRole('button', { name: 'Read disk version', exact: true }).click(); await showContent(page)
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Material text"]')?.value.includes('候选前句'))
 
     // A selected empty source fails after creation. Retry and reload retain both request identities.
@@ -110,6 +109,7 @@ await withWorkspace(output, async page => {
     const guide = page.getByText('Novel workspace', { exact: true })
     await page.locator('.sn-books').or(guide).first().waitFor()
     if (!await page.locator('.sn-books').isVisible()) await guide.click()
+    await openCreator()
     await creator.getByRole('button', { name: 'Retry original operation', exact: true }).waitFor()
     await creator.getByRole('button', { name: 'Retry original operation', exact: true }).click()
     await creator.getByRole('alert').filter({ hasText: /Selected material is empty/ }).waitFor()
@@ -135,7 +135,8 @@ await withWorkspace(output, async page => {
     await page.getByRole('button', { name: 'New book', exact: true }).click()
     await page.waitForFunction(previous => document.querySelector('select[aria-label="Book"]')?.value !== previous, bookId)
     const otherId = await page.getByLabel('Book', { exact: true }).inputValue()
-    await page.getByLabel('Book', { exact: true }).selectOption(bookId)
+    await selectBook(page, bookId)
+    await openDirectory(page)
     await page.locator('.sn-chapters').getByRole('button', { name: /可停止资料 · World/ }).click()
     await openGeneration(page)
     await panel.getByRole('button', { name: 'Stop', exact: true }).click()
@@ -148,8 +149,9 @@ await withWorkspace(output, async page => {
     await writeFile(join(output, 'material-generation-book.json'), JSON.stringify(identity))
   } else {
     identity = JSON.parse(await readFile(join(output, 'material-generation-book.json'), 'utf8'))
-    await page.getByLabel('Book', { exact: true }).selectOption(identity.bookId)
+    await selectBook(page, identity.bookId)
     await tab('Materials and plans')
+    await openDirectory(page)
     await page.locator('.sn-chapters').getByRole('button', { name: /可停止资料 · World/ }).click()
     await page.locator('#sn-tab-revisions').click()
     await panel.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Incomplete$/ }).waitFor()

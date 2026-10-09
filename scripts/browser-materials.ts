@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile, readdir, mkdir } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { withWorkspace, openBookCreator, openGeneration } from './browser-workspace.ts'
+import { withWorkspace, openBookCreator, openGeneration, createChapter, selectDocumentType, openMaterialCreator } from './browser-workspace.ts'
 const output = resolve(process.argv[2])
 const mode = process.argv[3] ?? 'workflow'
 await withWorkspace(output, async page => {
@@ -13,10 +13,10 @@ await withWorkspace(output, async page => {
     await openBookCreator(page)
     await page.getByRole('textbox', { name: 'Book title', exact: true }).fill('场景渡河')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
-    await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第一章')
-    await page.getByRole('button', { name: 'New chapter', exact: true }).click()
+    await createChapter(page, '第一章')
     await body.waitFor()
-    await page.getByRole('tab', { name: 'Materials and plans', exact: true }).click()
+    await selectDocumentType(page, 'Materials and plans')
+    await openMaterialCreator(page)
     await page.getByRole('combobox', { name: 'Material type', exact: true }).selectOption('scene')
     await page.getByRole('combobox', { name: 'Related chapter', exact: true }).selectOption({ label: '第一章' })
     await page.getByRole('textbox', { name: 'Material name', exact: true }).fill('渡口场景')
@@ -31,7 +31,7 @@ await withWorkspace(output, async page => {
     await panel.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Ready for review$/ }).waitFor()
     await panel.getByRole('button', { name: 'Accept', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Material text"]')?.value.includes('候选前句'))
-    await page.getByRole('tablist', { name: 'Book documents', exact: true }).getByRole('tab', { name: 'Chapters', exact: true }).click()
+    await selectDocumentType(page, 'Chapters')
     await body.waitFor()
     assert.equal(await body.inputValue(), '')
     await openGeneration(page)
@@ -54,7 +54,7 @@ await withWorkspace(output, async page => {
   } else {
     await body.waitFor()
     assert((await body.inputValue()).includes('候选前句'))
-    await page.getByRole('tab', { name: 'Materials and plans', exact: true }).click()
+    await selectDocumentType(page, 'Materials and plans')
     await page.getByRole('button', { name: /渡口场景 · Scene/ }).click()
     await material.waitFor()
     assert((await material.inputValue()).includes('候选前句'))

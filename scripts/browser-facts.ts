@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { withWorkspace, openBookCreator, openGeneration } from './browser-workspace.ts'
+import { withWorkspace, openBookCreator, openGeneration, openDirectory, createChapter, openWritingTool, openManagement } from './browser-workspace.ts'
 const output = resolve(process.argv[2])
 const mode = process.argv[3] ?? 'workflow'
 await withWorkspace(output, async page => {
@@ -12,19 +12,20 @@ await withWorkspace(output, async page => {
     await openBookCreator(page)
     await page.getByRole('textbox', { name: 'Book title', exact: true }).fill('证据渡河')
     await page.getByRole('button', { name: 'New book', exact: true }).click()
-    await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第一章')
-    await page.getByRole('button', { name: 'New chapter', exact: true }).click()
+    await createChapter(page, '第一章')
     await body.fill('左腕受伤。雨落在船板上。')
     await page.getByRole('button', { name: 'Save', exact: true }).click(); await saved()
-    await page.locator('#sn-tab-references').click()
+    await openWritingTool(page, 'references')
     await panel.getByRole('button', { name: 'Extract fact candidate', exact: true }).click()
     await panel.getByRole('button', { name: 'Accept facts', exact: true }).waitFor()
     await panel.getByRole('button', { name: 'Accept facts', exact: true }).click()
     await panel.getByText('Chapter facts accepted', { exact: true }).waitFor()
     await panel.getByRole('button', { name: 'Locate source', exact: true }).click()
-    assert.equal(await body.evaluate(element => element.selectionEnd - element.selectionStart), 12)
-    await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('第二章')
-    await page.getByRole('button', { name: 'New chapter', exact: true }).click()
+    assert.equal(await body.evaluate(async element => {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      return element.selectionEnd - element.selectionStart
+    }), 12)
+    await createChapter(page, '第二章')
     await body.waitFor()
     await page.waitForFunction(() => document.querySelector('input[aria-label="Rename"]')?.value === '第二章' && document.querySelector('textarea[aria-label="Chapter text"]')?.value === '')
     await openGeneration(page)
@@ -37,6 +38,7 @@ await withWorkspace(output, async page => {
     const project = JSON.parse(await readFile(join(output, 'workspace/novels', bookId, 'project.json'), 'utf8'))
     const first = project.chapters.find(item => item.title === '第一章')
     await writeFile(join(output, 'workspace/novels', bookId, 'chapters', `${first.chapterId}.md`), '作者改写了旧章。')
+    await openManagement(page)
     await page.locator('.sn-toolbar').getByRole('button', { name: 'Refresh', exact: true }).click()
     await openGeneration(page)
     await proposals.getByText(/Previous chapter facts expired/).waitFor()
@@ -44,6 +46,7 @@ await withWorkspace(output, async page => {
     assert(await proposals.getByRole('button', { name: 'Accept', exact: true }).isDisabled())
     assert.equal(JSON.parse(await readFile(join(output, 'generation-calls.json'), 'utf8')).length, 2)
   } else {
+    await openDirectory(page)
     await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click()
     await page.waitForFunction(() => document.querySelector('input[aria-label="Rename"]')?.value === '第二章')
     await body.waitFor()

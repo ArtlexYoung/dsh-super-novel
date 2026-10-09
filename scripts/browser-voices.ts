@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { withWorkspace, openGeneration } from './browser-workspace.ts'
+import { withWorkspace, openGeneration, selectBook, openDirectory, openWritingTool, openManagement } from './browser-workspace.ts'
 const output = resolve(process.argv[2]), mode = process.argv[3] ?? 'workflow'
 const count = () => readFile(join(output, 'generation-calls.json'), 'utf8').then(text => JSON.parse(text).length, () => 0)
 const callsBefore = await count()
 await withWorkspace(output, async page => {
   const body = page.getByRole('textbox', { name: 'Chapter text', exact: true }), tabs = page.locator('.sn-work-tabs')
   const voices = page.locator('.sn-voices'), proposals = page.locator('.sn-proposals'), transfer = page.locator('.sn-transfer')
-  const tab = id => page.locator(`#sn-tab-${id}`).click()
+  const tab = id => ['references', 'assessment'].includes(id) ? openWritingTool(page, id) : page.locator(`#sn-tab-${id}`).click()
   if (mode === 'workflow') {
+    await openManagement(page)
     await transfer.getByText('Import and export', { exact: true }).click()
     await transfer.getByLabel('Markdown / TXT file', { exact: true }).setInputFiles({ name: '渡河.md', mimeType: 'text/markdown', buffer: Buffer.from('# 第一章\n风，风。慢一点。\n\n# 第二章\n她没有回头。\n') })
     await transfer.getByText(/2 Chapters · Facts not analyzed/).waitFor()
@@ -22,6 +23,7 @@ await withWorkspace(output, async page => {
     await voices.getByRole('button', { name: 'Authorize selection', exact: true }).click()
     await tab('references')
     await voices.getByText(/Narration · Active/).waitFor()
+    await openDirectory(page)
     await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click(); await openGeneration(page)
     await proposals.getByText('Select authorized voices', { exact: true }).click()
     await proposals.getByRole('checkbox', { name: /作者自有开篇 · Narration · Active/ }).check()
@@ -32,6 +34,7 @@ await withWorkspace(output, async page => {
     await voices.getByText(/Narration · Revoked/).waitFor(); await tab('revisions')
     await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Expired$/ }).waitFor()
     assert(await proposals.getByRole('button', { name: 'Accept', exact: true }).isDisabled())
+    await openManagement(page)
     const download = page.waitForEvent('download'); await transfer.getByRole('button', { name: 'Export', exact: true }).click()
     await (await download).saveAs(join(output, 'export.md'))
     const exported = await readFile(join(output, 'export.md'), 'utf8')
@@ -40,14 +43,16 @@ await withWorkspace(output, async page => {
     await transfer.getByRole('button', { name: 'Import as new book', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Chapter text"]')?.value.includes('风，风。慢一点。'))
     assert.equal(await body.inputValue(), '# 第一章\n风，风。慢一点。\n\n')
-    await page.getByLabel('Book', { exact: true }).selectOption({ label: '渡河' })
+    await selectBook(page, { label: '渡河' })
+    await openDirectory(page)
     await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click(); await tab('revisions')
     await page.locator('#sn-tab-writing').focus(); await page.keyboard.press('ArrowRight')
-    assert.equal(await page.locator('#sn-tab-revisions').getAttribute('aria-selected'), 'true')
+    assert.equal(await page.locator('#sn-tab-directory').getAttribute('aria-selected'), 'true')
     await tab('revisions')
     assert.equal(await count() - callsBefore, 1)
   } else {
-    await page.getByLabel('Book', { exact: true }).selectOption({ label: '渡河' })
+    await selectBook(page, { label: '渡河' })
+    await openDirectory(page)
     await page.locator('.sn-chapters').getByRole('button', { name: /第二章/ }).click()
     await body.waitFor(); await tab('references'); await voices.getByText(/Narration · Revoked/).waitFor()
     await tab('revisions'); await proposals.locator('.sn-candidate-status [role=status]').filter({ hasText: /^Expired$/ }).waitFor()

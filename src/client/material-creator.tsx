@@ -20,13 +20,14 @@ function retainedDraft(key, bookId) {
 }
 
 /** Creation and generation have separate receipts. Retain both identities for a lost response or reload. */
-export function MaterialCreator({ api, sessionId, book, workspaceId, writable, t, onBusy, created }) {
+export function MaterialCreator({ api, sessionId, book, workspaceId, writable, t, onBusy, created, active }) {
   const storageKey = `super-novel.materialDraft:${workspaceId}:${book.bookId}`
   const [draft] = useState(() => retainedDraft(storageKey, book.bookId))
   const [kind, setKind] = useState(draft.kind), [title, setTitle] = useState(draft.title)
   const [instruction, setInstruction] = useState(draft.instruction)
   const [sourceIds, setSourceIds] = useState(draft.sourceIds), [linkedChapterId, setLinkedChapterId] = useState(draft.linkedChapterId)
   const [open, setOpen] = useState(!materialSources(book).length || !!draft.transaction)
+  useEffect(() => { if (active) setOpen(true) }, [active])
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const pending = useRef(null), mounted = useRef(true), transaction = useRef(draft.transaction ?? null)
   const language = t('templateLanguage')

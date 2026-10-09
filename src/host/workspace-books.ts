@@ -10,6 +10,8 @@ import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { ZodError } from 'zod'
 import { BookError, hash } from '../domain/books.js'
 import { BookStore } from './book-store.js'
+import { StorageLocations, inside } from './storage-location.js'
+import { BookFiles } from './book-files.js'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap { 'super-novel/storage': { readonly reason: string } }
@@ -22,9 +24,11 @@ export interface WorkspaceBooks {
   readonly workspaceId: string
   readonly writable: boolean
   readonly session: Session
+  readonly defaultRoot: string
+  readonly mode: string
 }
 
-export async function workspaceBooks(ctx: Context, sessionId: string, writing: boolean, signal: AbortSignal): Promise<WorkspaceBooks> {
+export async function workspaceAccess(ctx: Context, sessionId: string, signal: AbortSignal): Promise<{ root: string; mode: string; session: Session }> {
   signal.throwIfAborted()
   const sessions = ctx.get('sessions')
   const persistence = ctx.get('sessionPersistence')
@@ -49,9 +53,23 @@ export async function workspaceBooks(ctx: Context, sessionId: string, writing: b
     } finally { await handle.close() }
   }
   const mode = policy.resolve({ session }).mode
-  const writable = mode !== 'read-only'
-  if (writing && !writable) throw new BookError('read-only')
-  return { store: await BookStore.at(root), root, workspace: basename(root), workspaceId: hash(root), writable, session }
+  return { root, mode, session }
+}
+
+export async function workspaceBooks(ctx: Context, sessionId: string, writing: boolean, signal: AbortSignal): Promise<WorkspaceBooks> {
+  const access = await workspaceAccess(ctx, sessionId, signal)
+  const location = await (await StorageLocations.at(access.root)).read()
+  const canonical = (await BookFiles.at(location.root)).root
+  if (canonical !== location.root) throw new BookError('unsafe-path')
+  const fs = ctx.get('fs')
+  if (!fs) throw new BookError('host-unavailable')
+  const selected = await fs.resolve(canonical, { signal })
+  if (fs.processPathFromHostPath(canonical) !== canonical || fs.processPath(selected) !== canonical) throw new BookError('local-only')
+  const { mode, session } = access
+  const allowed = mode === 'danger-full-access' || inside(access.root, location.root)
+  const writable = mode !== 'read-only' && allowed
+  if (writing && !writable) throw new BookError(mode === 'read-only' ? 'read-only' : 'location-outside-workspace')
+  return { store: await BookStore.at(location.root), root: location.root, defaultRoot: access.root, mode, workspace: basename(location.root), workspaceId: hash(location.root), writable, session }
 }
 
 export async function storageResult<T>(action: () => Promise<T>): Promise<T> {
