@@ -23,6 +23,8 @@ import { BookFiles } from './host/book-files.js'
 import type { StorageLocation, ChangeStorageLocationRequest, PickStorageLocation, DraftQuery, DraftRequest, DraftSummary, DraftVersionQuery, DiskDraft, SettleDraftRequest, DraftListing } from './types.js'
 import type { GenerateChapterRequest, ProposalDecisionRequest, ProposalSummary, ProposalView } from './types.js'
 import { ProposalStore } from './host/proposal-store.js'
+import { IntentStore } from './host/intent-store.js'
+import type { ChapterIntent, SaveIntentRequest, SuggestIntentRequest, IntentSuggestion, GenerationContextPreview } from './types.js'
 import { ProposalTasks } from './host/proposal-tasks.js'
 import { hostChapterGenerator, hostTextGenerator } from './host/chapter-generator.js'
 import { ChapterHistory } from './host/chapter-history.js'
@@ -58,6 +60,7 @@ export class SuperNovel extends TypertRemoteService {
   private readonly lifetime = new AbortController()
   private readonly extractions = new Map<string, Promise<FactProposal>>()
   private readonly reviews = new Map<string, Promise<ReviewView>>()
+  private readonly directions = new Map<string, Promise<IntentSuggestion>>()
 
   constructor(ctx: Context) {
     super(ctx, 'superNovel', { namespace: 'superNovel' })
@@ -66,7 +69,7 @@ export class SuperNovel extends TypertRemoteService {
       this.lifetime.abort()
       for (const timer of this.backupTimers.values()) clearTimeout(timer)
       this.backupTimers.clear()
-      await Promise.allSettled([this.tasks.dispose(), ...this.extractions.values(), ...this.reviews.values(), ...this.backupJobs])
+      await Promise.allSettled([this.tasks.dispose(), ...this.extractions.values(), ...this.reviews.values(), ...this.directions.values(), ...this.backupJobs])
     })
   }
 
@@ -366,6 +369,56 @@ export class SuperNovel extends TypertRemoteService {
   @Remote
   async chapter(sessionId: string, bookId: string, chapterId: string, signal: AbortSignal): Promise<ChapterText> {
     return await storageResult(async () => (await workspaceBooks(this.ctx, sessionId, false, signal)).store.readChapter(bookId, chapterId))
+  }
+
+  /** Version-checked manual chapter changes; repeated operation IDs are idempotent. */
+  @Remote
+  async chapterIntent(sessionId: string, bookId: string, chapterId: string, signal: AbortSignal): Promise<ChapterIntent> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await IntentStore.at(scope.root, scope.workspaceId, scope.store)).read(bookId, chapterId)
+    })
+  }
+
+  @Remote
+  async saveChapterIntent(sessionId: string, request: SaveIntentRequest, signal: AbortSignal): Promise<ChapterIntent> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal)
+      const value = await (await IntentStore.at(scope.root, scope.workspaceId, scope.store)).save(request, signal)
+      this.scheduleBackup(scope.root, request.bookId, sessionId)
+      return value
+    })
+  }
+
+  @Remote
+  async intentSuggestions(sessionId: string, bookId: string, chapterId: string, signal: AbortSignal): Promise<IntentSuggestion[]> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await IntentStore.at(scope.root, scope.workspaceId, scope.store)).list(bookId, chapterId)
+    })
+  }
+
+  /** One explicit paid call; directions remain author planning until saved. */
+  @Remote
+  async suggestChapterIntent(sessionId: string, request: SuggestIntentRequest, signal: AbortSignal): Promise<IntentSuggestion> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, true, signal), key = `${scope.workspaceId}:${JSON.stringify(request)}`
+      const existing = this.directions.get(key)
+      if (existing) return await existing
+      const task = (await IntentStore.at(scope.root, scope.workspaceId, scope.store)).suggest(request, hostTextGenerator(this.ctx, scope.session), AbortSignal.any([signal, this.lifetime.signal, AbortSignal.timeout(300_000)]))
+      this.directions.set(key, task)
+      try { const value = await task; this.scheduleBackup(scope.root, request.bookId, sessionId); return value }
+      finally { if (this.directions.get(key) === task) this.directions.delete(key) }
+    })
+  }
+
+  /** Inspect exactly the selected generation inputs, without writes or model calls. */
+  @Remote
+  async generationContext(sessionId: string, request: GenerateChapterRequest, signal: AbortSignal): Promise<GenerationContextPreview> {
+    return await storageResult(async () => {
+      const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
+      return await (await ProposalStore.at(scope.root, scope.workspaceId, scope.store)).preview(request, signal)
+    })
   }
 
   /** Version-checked manual chapter changes; repeated operation IDs are idempotent. */

@@ -88,3 +88,5 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 兼容回归检查两代预设服务、卸载释放、默认模式不变、RPC 严格 schema 和图标导出。macOS 已用未修改的 DSH NEXT `2.0.17-next` 安装版、隔离 profile 和真实 tarball 运行侧栏及完整写作 workflow/reopen；宿主为 `0.2.0-rc.2`，没有兼容豁免。
 
 平台补验可在对应机器执行上面的类型、构建、测试和包检查，再运行实际包 workflow/reopen。Windows 的目录 fsync 限制及文件占用重试已有模拟回归，不能替代 Windows/Linux 实机验收。其他桌面版本也需单独验证。POSIX 权限测试在 Windows 跳过，跳过项必须记录。
+
+写作辅助用 `scripts/browser-writing-methods.ts` 验证意图输入保留、磁盘版本、AI 方向编辑、纯读上下文和局部审校候选。`test/writing-methods.test.ts` 覆盖幂等、冲突、来源变化、预算、引用越界、范围保护和备份包含意图。

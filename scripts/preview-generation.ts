@@ -23,6 +23,10 @@ export async function apply(ctx) {
       calls.push({ sessionId: options.sessionId, instruction: input.instruction, chapter: input.chapter, selection: input.selection,
         ...(input.documentKind ? { documentKind: input.documentKind } : {}), ...(input.selectedMaterials ? { selectedMaterials: input.selectedMaterials } : {}) })
       await writeFile(callFile, JSON.stringify(calls))
+      if (input.task === 'suggest-scene-intent') {
+        yield { type: 'text-delta', index: 0, text: JSON.stringify({ directions: [{ ...input.currentIntent, goal: '在天亮前把信交给船夫。', choice: '用右手递信，左腕仍藏在袖中。' }, { ...input.currentIntent, goal: '等船靠岸后再交信。', choice: '先问清渡口是否有人守着。' }] }) }
+        yield { type: 'finish', reason: { kind: 'stop' } }; return
+      }
       if (input.task === 'extract-facts') {
         const quote = input.chapter.slice(0, Math.min(40, input.chapter.length))
         yield { type: 'text-delta', index: 0, text: JSON.stringify({ summary: { text: quote, quote, start: 0, end: quote.length }, facts: [{ subject: '主角', predicate: '当前状态', value: quote, scope: { kind: 'reader' }, sourceChapterId: input.chapterId, quote, start: 0, end: quote.length }] }) }

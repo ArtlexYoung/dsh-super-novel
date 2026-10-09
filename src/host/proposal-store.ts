@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { BookError, contentSchema, hash, idSchema, json, availableDocument } from '../domain/books.js'
 import { adoption, candidate, decisionSchema, generationPrompt, generationRequestSchema, parseProposal, proposalView, validateRange } from '../domain/proposals.js'
 import type { Proposal } from '../domain/proposals.js'
-import type { GenerateChapterRequest, GenerationUsage, ProposalDecisionRequest, ProposalSummary, ProposalView } from '../types.js'
+import type { GenerateChapterRequest, GenerationUsage, ProposalDecisionRequest, ProposalSummary, ProposalView, GenerationContextPreview } from '../types.js'
 import { BookFiles } from './book-files.js'
 import { BookStore } from './book-store.js'
 import { generationMachine, ownerRunning } from './proposal-runtime.js'
@@ -12,6 +12,7 @@ import type { GenerationOwner } from './proposal-runtime.js'
 import { FactStore } from './fact-store.js'
 import { ReviewStore } from './review-store.js'
 import { VoiceStore } from './voice-store.js'
+import { IntentStore } from './intent-store.js'
 
 const queues = new Map<string, Promise<void>>()
 
@@ -55,55 +56,94 @@ export class ProposalStore {
         if (proposal.requestHash !== hash(json(request))) throw new BookError('operation-conflict')
         return { proposal, created: false }
       }
-      const chapter = await this.books.readChapter(request.bookId, request.chapterId)
-      if (['facts', 'voice'].includes(chapter.book.chapters.find(item => item.chapterId === request.chapterId)?.kind ?? '')) throw new BookError('invalid-material')
-      if (chapter.book.revision !== request.expectedRevision || chapter.hash !== request.expectedHash || chapter.externallyModified) throw new BookError('revision-conflict')
-      let baseline = chapter.content, round = 0
-      if (request.parentProposalId && !request.reviewId || request.reviewId && !request.issueId || request.issueId && !request.reviewId) throw new BookError('invalid-request')
-      if (request.reviewId) {
-        const reviewed = await (await ReviewStore.at(this.files.root, this.workspaceId, this.books)).revision(request.bookId, request.reviewId, request.issueId!)
-        const { proposalId: _id, ...expected } = reviewed.request
-        const { proposalId: _requested, ...actual } = request
-        if (json(generationRequestSchema.parse({ ...expected, proposalId: request.proposalId })) !== json(request)) throw new BookError('invalid-request')
-        round = reviewed.round
-        if (request.parentProposalId) baseline = (await this.view(request.bookId, request.parentProposalId, false)).candidate
-      }
-      validateRange(request, baseline)
-      const context = []
-      const targetDocument = chapter.book.chapters.find(item => item.chapterId === request.chapterId)!
-      if (!availableDocument(targetDocument)) throw new BookError('material-unavailable')
-      const targetKind = targetDocument.kind ?? 'chapter'
-      for (const id of request.materialIds ?? []) {
-        const selected = await this.books.readChapter(request.bookId, id)
-        const document = selected.book.chapters.find(item => item.chapterId === id)!
-        if (!availableDocument(document)) throw new BookError('material-unavailable')
-        const kind = document.kind ?? 'chapter'
-        if (kind === 'facts' || kind === 'voice' || id === request.chapterId || kind === 'chapter' && targetKind === 'chapter') throw new BookError('invalid-material')
-        if (selected.externallyModified || selected.book.revision !== request.expectedRevision) throw new BookError('revision-conflict')
-        if (!selected.content.trim()) throw new BookError('material-empty')
-        context.push({ chapterId: id, title: document.title, kind, revision: document.revision, hash: selected.hash, content: selected.content })
-      }
-      const now = Date.now()
-      const voices = request.voiceIds ? await new VoiceStore(this.books).selected(request.bookId, request.voiceIds) : undefined
-      const facts = request.useFacts ? await (await FactStore.at(this.files.root, this.workspaceId, this.books)).context(request.bookId, request.chapterId, request.knowledgeScope ?? 'reader', 128 * 1024) : undefined
-      if (facts && facts.state !== 'complete') throw new BookError(facts.state === 'over-budget' ? 'context-too-large' : 'facts-incomplete')
-      if ((await this.books.readBook(request.bookId)).revision !== request.expectedRevision) throw new BookError('revision-conflict')
-      const proposal: Proposal = { schemaVersion: 1, workspaceId: this.workspaceId, sessionId, owner, request,
-        requestHash: hash(json(request)), acceptanceId: randomUUID(), baseline,
-        baselineChapterRevision: chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.revision,
-        createdAt: now, updatedAt: now, state: 'generating', reason: '', replacement: '',
-        candidateHash: '', elapsedMs: 0, usage: { state: 'unknown' },
-        ...(chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind ? { documentKind: chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind } : {}),
-        ...(request.materialIds ? { context } : {}),
-        ...(voices ? { voiceContext: voices.map(voice => ({ ...voice, schemaVersion: 1 as const, state: 'active' as const })) } : {}),
-        ...(facts ? { factContext: { content: json({ facts: facts.facts, summaries: facts.summaries }), scope: request.knowledgeScope ?? 'reader', sources: [...facts.sources] } } : {}),
-        ...(round ? { revisionRound: round } : {}), ...(request.parentProposalId ? { parentCandidateHash: hash(baseline) } : {}) }
-      proposal.candidateHash = hash(candidate(proposal))
+      const proposal = await this.prepareSnapshot(sessionId, request, signal, owner)
       if (Buffer.byteLength(generationPrompt(proposal), 'utf8') > 256 * 1024) throw new BookError('context-too-large')
       await this.files.directory(join(this.folder(request.bookId), 'proposals'))
       await this.write(proposal, { exists: false, text: '' })
       return { proposal, created: true }
     })
+  }
+
+
+  /** Shared pure snapshot builder: preview and generation cannot select different inputs. */
+  async prepareSnapshot(sessionId: string, input: GenerateChapterRequest, signal: AbortSignal, owner: GenerationOwner = { machine: generationMachine, pid: process.pid, runtimeId: randomUUID() }): Promise<Proposal> {
+    const request = generationRequestSchema.parse(input)
+    signal.throwIfAborted()
+    const chapter = await this.books.readChapter(request.bookId, request.chapterId)
+    if (['facts', 'voice'].includes(chapter.book.chapters.find(item => item.chapterId === request.chapterId)?.kind ?? '')) throw new BookError('invalid-material')
+    if (chapter.book.revision !== request.expectedRevision || chapter.hash !== request.expectedHash || chapter.externallyModified) throw new BookError('revision-conflict')
+    let baseline = chapter.content, round = 0
+    if (request.parentProposalId && !request.reviewId || request.reviewId && !request.issueId || request.issueId && !request.reviewId) throw new BookError('invalid-request')
+    if (request.reviewId) {
+      const reviewed = await (await ReviewStore.at(this.files.root, this.workspaceId, this.books)).revision(request.bookId, request.reviewId, request.issueId!)
+      const { proposalId: _id, ...expected } = reviewed.request
+      const { proposalId: _requested, ...actual } = request
+      if (json(generationRequestSchema.parse({ ...expected, proposalId: request.proposalId })) !== json(request)) throw new BookError('invalid-request')
+      round = reviewed.round
+      if (request.parentProposalId) baseline = (await this.view(request.bookId, request.parentProposalId, false)).candidate
+    }
+    validateRange(request, baseline)
+    const context = []
+    const targetDocument = chapter.book.chapters.find(item => item.chapterId === request.chapterId)!
+    if (!availableDocument(targetDocument)) throw new BookError('material-unavailable')
+    const targetKind = targetDocument.kind ?? 'chapter'
+    for (const id of request.materialIds ?? []) {
+      const selected = await this.books.readChapter(request.bookId, id)
+      const document = selected.book.chapters.find(item => item.chapterId === id)!
+      if (!availableDocument(document)) throw new BookError('material-unavailable')
+      const kind = document.kind ?? 'chapter'
+      if (kind === 'facts' || kind === 'voice' || id === request.chapterId || kind === 'chapter' && targetKind === 'chapter') throw new BookError('invalid-material')
+      if (selected.externallyModified || selected.book.revision !== request.expectedRevision) throw new BookError('revision-conflict')
+      if (!selected.content.trim()) throw new BookError('material-empty')
+      context.push({ chapterId: id, title: document.title, kind, revision: document.revision, hash: selected.hash, content: selected.content })
+    }
+    const targetAt = chapter.book.chapters.findIndex(item => item.chapterId === request.chapterId)
+    for (const id of request.precedingChapterIds ?? []) {
+      const selected = await this.books.readChapter(request.bookId, id), document = selected.book.chapters.find(item => item.chapterId === id)!
+      if (targetKind !== 'chapter' || document.kind && document.kind !== 'chapter' || chapter.book.chapters.findIndex(item => item.chapterId === id) >= targetAt || !availableDocument(document)) throw new BookError('invalid-material')
+      if (selected.externallyModified || selected.book.revision !== request.expectedRevision) throw new BookError('revision-conflict')
+      if (!selected.content.trim()) throw new BookError('material-empty')
+      context.push({ chapterId: id, title: document.title, kind: 'chapter' as const, revision: document.revision, hash: selected.hash, content: selected.content })
+    }
+    const intent = request.intentVersion !== undefined ? await (await IntentStore.at(this.files.root, this.workspaceId, this.books)).read(request.bookId, request.chapterId) : false
+    if (intent && (targetKind !== 'chapter' || intent.version !== request.intentVersion)) throw new BookError('revision-conflict')
+    const now = Date.now()
+    const voices = request.voiceIds ? await new VoiceStore(this.books).selected(request.bookId, request.voiceIds) : undefined
+    const facts = request.useFacts ? await (await FactStore.at(this.files.root, this.workspaceId, this.books)).context(request.bookId, request.chapterId, request.knowledgeScope ?? 'reader', 128 * 1024) : undefined
+    if (facts && facts.state !== 'complete') throw new BookError(facts.state === 'over-budget' ? 'context-too-large' : 'facts-incomplete')
+    if ((await this.books.readBook(request.bookId)).revision !== request.expectedRevision) throw new BookError('revision-conflict')
+    const proposal: Proposal = { schemaVersion: 1, workspaceId: this.workspaceId, sessionId, owner, request,
+      requestHash: hash(json(request)), acceptanceId: randomUUID(), baseline,
+      baselineChapterRevision: chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.revision,
+      createdAt: now, updatedAt: now, state: 'generating', reason: '', replacement: '',
+      candidateHash: '', elapsedMs: 0, usage: { state: 'unknown' },
+      ...(chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind ? { documentKind: chapter.book.chapters.find(item => item.chapterId === request.chapterId)!.kind } : {}),
+      ...(request.materialIds || request.precedingChapterIds ? { context } : {}),
+      ...(intent ? { intentContext: { version: intent.version, hash: intent.hash, intent: intent.intent } } : {}),
+      ...(voices ? { voiceContext: voices.map(voice => ({ ...voice, schemaVersion: 1 as const, state: 'active' as const })) } : {}),
+      ...(facts ? { factContext: { content: json({ facts: facts.facts, summaries: facts.summaries }), scope: request.knowledgeScope ?? 'reader', sources: [...facts.sources] } } : {}),
+      ...(round ? { revisionRound: round } : {}), ...(request.parentProposalId ? { parentCandidateHash: hash(baseline) } : {}) }
+    proposal.candidateHash = hash(candidate(proposal))
+    return proposal
+  }
+
+  async preview(input: GenerateChapterRequest, signal: AbortSignal): Promise<GenerationContextPreview> {
+    const proposal = await this.prepareSnapshot('context-preview', input, signal)
+    const bytes = Buffer.byteLength(generationPrompt(proposal)), maxBytes = 256 * 1024
+    const sections: GenerationContextPreview['sections'][number][] = []
+    const add = (kind: string, sourceId: string, title: string, reason: string, content: string): void => { sections.push({ kind, sourceId, title, reason, content, bytes: Buffer.byteLength(content) }) }
+    if (proposal.request.hardConstraints) add('constraints', '', 'Author constraints', 'author', proposal.request.hardConstraints)
+    if (proposal.intentContext) {
+      if (proposal.intentContext.intent.hardConstraints) add('constraints', proposal.request.chapterId, 'Scene constraints', 'intent', proposal.intentContext.intent.hardConstraints)
+      add('intent', proposal.request.chapterId, 'Scene intent', 'intent', json(proposal.intentContext.intent))
+    }
+    add('instruction', '', 'Writing task', 'author', proposal.request.instruction)
+    if (proposal.request.materials) add('materials', '', 'Author references', 'author', proposal.request.materials)
+    for (const item of proposal.context ?? []) add(item.kind, item.chapterId, item.title, item.kind === 'chapter' ? 'preceding' : 'selected', item.content)
+    if (proposal.factContext) add('facts', '', 'Facts', `knowledge:${proposal.factContext.scope}`, proposal.factContext.content)
+    for (const voice of proposal.voiceContext ?? []) add('voice', voice.voiceId, voice.sourceDescription, 'authorized', voice.sample)
+    add('chapter', proposal.request.chapterId, 'Saved chapter', 'baseline', proposal.baseline)
+    return { bytes, maxBytes, state: bytes > maxBytes ? 'over-budget' : 'ready', sections }
   }
 
   async checkpoint(bookId: string, proposalId: string, replacement: string | undefined, state: 'generating' | 'review' | 'interrupted', reason: string, usage: GenerationUsage, elapsedMs: number): Promise<Proposal> {
@@ -137,6 +177,10 @@ export class ProposalStore {
     if (book.recoveryRequired) return proposalView(proposal, proposal.state === 'generating' && !active ? 'interrupted' : proposal.state, 'recovery-required', true)
     const chapter = await this.books.readChapter(bookId, proposal.request.chapterId)
     if (chapter.book.revision !== proposal.request.expectedRevision || chapter.hash !== proposal.request.expectedHash) return proposalView(proposal, active && proposal.state === 'generating' ? 'generating' : 'expired', 'revision-conflict', false)
+    if (proposal.intentContext) {
+      const intent = await (await IntentStore.at(this.files.root, this.workspaceId, this.books)).read(bookId, proposal.request.chapterId)
+      if (intent.version !== proposal.intentContext.version || intent.hash !== proposal.intentContext.hash) return proposalView(proposal, 'expired', 'intent-changed', false)
+    }
     for (const item of proposal.context ?? []) {
       const current = await this.books.readChapter(bookId, item.chapterId)
       if (current.hash !== item.hash || current.externallyModified) return proposalView(proposal, 'expired', 'revision-conflict', false)

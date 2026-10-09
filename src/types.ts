@@ -108,6 +108,35 @@ export interface GenerateChapterRequest {
   readonly parentProposalId?: string
   readonly reviewId?: string
   readonly issueId?: string
+  readonly hardConstraints?: string
+  readonly intentVersion?: number
+  readonly precedingChapterIds?: readonly string[]
+}
+export interface SceneIntent {
+  readonly goal: string; readonly obstacle: string; readonly choice: string; readonly cost: string
+  readonly outcome: string; readonly viewpoint: string; readonly hardConstraints: string
+}
+export interface ChapterIntent {
+  readonly bookId: string; readonly chapterId: string; readonly version: number
+  readonly intent: SceneIntent; readonly hash: string; readonly updatedAt: number
+}
+export interface SaveIntentRequest {
+  readonly workspaceId: string; readonly operationId: string; readonly bookId: string; readonly chapterId: string
+  readonly expectedVersion: number; readonly expectedRevision: number; readonly expectedHash: string; readonly intent: SceneIntent
+}
+export interface SuggestIntentRequest {
+  readonly workspaceId: string; readonly proposalId: string; readonly bookId: string; readonly chapterId: string
+  readonly expectedVersion: number; readonly expectedRevision: number; readonly expectedHash: string
+  readonly instruction: string
+}
+export interface IntentSuggestion {
+  readonly proposalId: string; readonly bookId: string; readonly chapterId: string; readonly sourceHash: string
+  readonly intentVersion: number; readonly directions: readonly SceneIntent[]; readonly createdAt: number
+  readonly state: 'review' | 'expired'; readonly usage: GenerationUsage; readonly elapsedMs: number
+}
+export interface GenerationContextPreview {
+  readonly bytes: number; readonly maxBytes: number; readonly state: 'ready' | 'over-budget'
+  readonly sections: readonly { readonly kind: string; readonly sourceId: string; readonly title: string; readonly reason: string; readonly content: string; readonly bytes: number }[]
 }
 export interface MaterialSnapshot {
   readonly chapterId: string
@@ -209,6 +238,8 @@ export type GenerationUsage = { readonly state: 'unknown' } | {
   readonly reasoningTokens?: number
 }
 export interface ProposalView extends ProposalSummary {
+  readonly hardConstraints?: string
+  readonly intentContext?: { readonly version: number; readonly hash: string; readonly intent: SceneIntent }
   readonly baselineRevision: number
   readonly baselineHash: string
   readonly baseline: string
@@ -305,6 +336,9 @@ export interface ReviewRequest {
   readonly maxCharacters: number
   readonly minParagraphs: number
   readonly maxParagraphs: number
+  readonly start?: number; readonly end?: number
+  readonly intentionalRepetitions?: readonly string[]
+  readonly intentVersion?: number; readonly hardConstraints?: string; readonly materialIds?: readonly string[]
 }
 export interface ReviewIssue {
   readonly issueId: string

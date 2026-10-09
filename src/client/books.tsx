@@ -11,6 +11,7 @@ import { Transfer } from './transfer.js'
 import { DocumentDirectory } from './document-directory.js'
 import { materialKinds } from './materials.js'
 import { WritingPreferences, useWritingPreferences } from './writing-preferences.js'
+import { ChapterIntent } from './chapter-intent.js'
 import { MaterialLibrary } from './material-library.js'
 import { Backups } from './backups.js'
 import { StorageSettings } from './storage-location.js'
@@ -92,7 +93,7 @@ export function Books({ api, sessionId, t, setup }) {
   const planning = currentChapter?.kind && currentChapter.kind !== 'chapter'
   const activeTab = planning && !['writing', 'revisions'].includes(workTab) ? 'writing' : workTab
   const managementOpen = pane === 'management'
-  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'selection-material', 'selection-ai'].includes(pane) || compact && pane === 'directory'
+  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'selection-material', 'selection-ai', 'intent'].includes(pane) || compact && pane === 'directory'
   const capturePosition = () => {
     if (!editor.current || !entry) return
     positions.current.set(documentIdentity, { start: editor.current.selectionStart, end: editor.current.selectionEnd, direction: editor.current.selectionDirection, scroll: editor.current.scrollTop })
@@ -304,7 +305,7 @@ export function Books({ api, sessionId, t, setup }) {
     change('save', { content: entry.content, expectedHash: entry.baseHash, expectedRevision: entry.bookRevision, operationId: entry.operationId })
   }
 
-  const proposals = entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} preferredProposal={preferredProposal} writingAction={writingAction} adopted={() => setRefresh(value => value + 1)} />
+  const proposals = entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} preferredProposal={preferredProposal} writingAction={writingAction} openIntent={() => openPane('intent')} adopted={() => setRefresh(value => value + 1)} />
   const adjacentChapter = direction => action(async () => {
     const chapters = book.chapters.filter(item => !item.kind || item.kind === 'chapter'), at = chapters.findIndex(item => item.chapterId === chapterId), target = chapters[at + direction]
     if (!target) return
@@ -355,7 +356,7 @@ export function Books({ api, sessionId, t, setup }) {
     <StorageSettings api={api} sessionId={sessionId} revision={refresh} writable={!busy} t={t} beforeSwitch={flushDraft} switching={setReadingDisk} switched={() => { setEntry(null); setLibrary(null); setBookId(''); setChapterId(''); setRefresh(value => value + 1) }} />
     {library && <Backups key={`backup:${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} writable={library.writable && !busy} t={t} beforeBackup={flushDraft} restored={() => setRefresh(value => value + 1)} />}
     {book && <Button size="sm" onClick={manageMaterials}>{t('materialLibrary')}</Button>}
-    {currentChapter && !planning && <div className="sn-more-tools"><Button size="sm" id="sn-tab-references" onClick={() => showTool('references')}>{t('tab-references')}</Button><Button size="sm" id="sn-tab-assessment" onClick={() => showTool('assessment')}>{t('tab-assessment')}</Button></div>}
+    {currentChapter && !planning && <div className="sn-more-tools"><Button size="sm" onClick={() => openPane('intent')}>{t('chapterIntent')}</Button><Button size="sm" id="sn-tab-references" onClick={() => showTool('references')}>{t('tab-references')}</Button><Button size="sm" id="sn-tab-assessment" onClick={() => showTool('assessment')}>{t('tab-assessment')}</Button></div>}
     {currentChapter && <section className="sn-document-management"><h3>{currentChapter.title}</h3>
           <details className="sn-document-options" open={documentOptionsOpen} onToggle={event => setDocumentOptionsOpen(event.currentTarget.open)}><summary>{t('documentOptions')}</summary><div className="sn-row sn-recovery-actions"><Button size="sm" disabled={!entry || busy || readingDisk} onClick={readDisk}>{t('reloadDisk')}</Button><Button size="sm" disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</Button>
             <Button size="sm" disabled={!writable || book.chapters[0].chapterId === chapterId} onClick={() => move(-1)}><IconChevronUpOutline14 />{t('moveUp')}</Button>
@@ -417,11 +418,12 @@ export function Books({ api, sessionId, t, setup }) {
           {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <><Facts key={`facts:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} /><Voices key={`voices:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} changed={applyBook} /></>}
           </div>
           <div id="sn-panel-assessment" aria-labelledby="sn-tab-assessment" hidden={planning || workTab !== 'assessment'} role="tabpanel">
-          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Reviews key={`reviews:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} t={t} revisionHint={`${refresh}:${workTab === 'assessment'}`} revised={id => { setPreferredProposal(id); setRefresh(value => value + 1); setWorkTab('revisions') }} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
+          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Reviews key={`reviews:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} revisionHint={`${refresh}:${workTab === 'assessment'}`} revised={id => { setPreferredProposal(id); setRefresh(value => value + 1); setWorkTab('revisions') }} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
           </div>
         </>}
       </main>
     </div>}
+    {book && entry && !planning && <WorkspacePanel id="sn-panel-intent" title={t('chapterIntent')} open={pane === 'intent'} close={closePane} t={t}><ChapterIntent key={`${library.workspaceId}:${bookId}:${chapterId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={chapterId} entry={entry} open={pane === 'intent'} writable={writable} dirty={dirty} t={t} changed={() => setRefresh(value => value + 1)} /></WorkspacePanel>}
     {entry && <WorkspacePanel id="sn-panel-selection-ai" title={t('selectionAI')} open={pane === 'selection-ai'} close={closePane} t={t}>
       <p className="sn-notice">{t(dirty ? 'saveBeforeAI' : 'selectionAIRange')}</p>
       {selection.end > selection.start && <pre className="sn-reference-text">{entry.content.slice(selection.start, selection.end)}</pre>}

@@ -3,7 +3,7 @@ import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { BookError, contentSchema, hash, idSchema, json } from '../domain/books.js'
-import { mechanicalReview, reviewDimensions, reviewOutputSchema, reviewRequestSchema, reviewViewSchema, validateReviewEvidence } from '../domain/reviews.js'
+import { mechanicalReview, reviewDimensions, reviewOutputSchema, reviewRequestSchema, reviewViewSchema, validateReviewEvidence, reviewRange } from '../domain/reviews.js'
 import type { GenerateChapterRequest, ReviewRequest, ReviewView } from '../types.js'
 import { BookFiles } from './book-files.js'
 import { BookStore } from './book-store.js'
@@ -31,6 +31,8 @@ export class ReviewStore {
     const record = result.data
     if (record.result.reviewId !== id || record.result.bookId !== bookId || record.result.chapterId !== record.request.chapterId || record.result.proposalId !== record.request.proposalId || record.result.textHash !== record.request.expectedHash || new Set(record.result.dimensions.map(item => item.dimension)).size !== 4 ||
       record.result.issues.some(item => item.end > record.text.length || record.text.slice(item.start, item.end) !== item.quote)) throw new BookError('invalid-format')
+    const range = reviewRange(record.text, record.request)
+    if (record.result.issues.some(issue => issue.start < range.start || issue.end > range.end)) throw new BookError('invalid-format')
     const counts = mechanicalReview(record.text, record.request)
     if (record.result.state !== assessmentState(record.result.dimensions, record.result.issues.length) || record.result.characters !== counts.characters || record.result.paragraphs !== counts.paragraphs) throw new BookError('invalid-format')
     return result.data
@@ -46,9 +48,23 @@ export class ReviewStore {
       const proposal = await this.proposals.read(request.bookId, request.proposalId)
       const view = await this.proposals.view(request.bookId, request.proposalId, false)
       if (view.chapterId !== request.chapterId) throw new BookError('invalid-request')
-      return { text: view.candidate, context: json({ materials: proposal.request.materials, selected: proposal.context ?? [], facts: proposal.factContext?.content ?? '', ...(proposal.voiceContext ? { voices: proposal.voiceContext } : {}) }), valid: view.state === 'review' && view.candidateHash === request.expectedHash && source.book.revision === request.expectedRevision }
+      return { text: view.candidate, context: this.context(proposal), valid: view.state === 'review' && view.candidateHash === request.expectedHash && source.book.revision === request.expectedRevision }
     }
-    return { text: source.content, context: '', valid: source.hash === request.expectedHash && source.book.revision === request.expectedRevision && !source.externallyModified }
+    const valid = source.hash === request.expectedHash && source.book.revision === request.expectedRevision && !source.externallyModified && !source.book.recoveryRequired
+    let context = ''
+    if (valid && (request.intentVersion !== undefined || request.hardConstraints || request.materialIds?.length)) {
+      try {
+        const snapshot = await this.proposals.prepareSnapshot('review-context', { proposalId: request.reviewId, bookId: request.bookId, chapterId: request.chapterId, expectedRevision: request.expectedRevision, expectedHash: request.expectedHash,
+          mode: 'draft', instruction: 'Independent review context', materials: '', start: 0, end: source.content.length,
+          ...(request.intentVersion !== undefined ? { intentVersion: request.intentVersion } : {}), ...(request.hardConstraints !== undefined ? { hardConstraints: request.hardConstraints } : {}), ...(request.materialIds ? { materialIds: request.materialIds } : {}) }, new AbortController().signal)
+        context = this.context(snapshot)
+      } catch (error) { if (error instanceof BookError && ['revision-conflict', 'material-unavailable'].includes(error.code)) return { text: source.content, context: '', valid: false }; throw error }
+    }
+    return { text: source.content, context, valid }
+  }
+  private context(proposal: Awaited<ReturnType<ProposalStore['read']>>): string {
+    return json({ materials: proposal.request.materials, selected: proposal.context ?? [], facts: proposal.factContext?.content ?? '',
+      ...(proposal.voiceContext ? { voices: proposal.voiceContext } : {}), ...(proposal.intentContext ? { sceneIntent: proposal.intentContext } : {}), ...(proposal.request.hardConstraints ? { hardConstraints: proposal.request.hardConstraints } : {}) })
   }
   private async view(record: Record): Promise<ReviewView> {
     const target = await this.target(record.request)
@@ -72,13 +88,15 @@ export class ReviewStore {
     const target = await this.target(request)
     if (!target.valid) throw new BookError('revision-conflict')
     const mechanical = mechanicalReview(target.text, request)
+    const range = reviewRange(target.text, request)
     const dimensions: { dimension: typeof reviewDimensions[number]; state: 'checked' | 'unknown' | 'degraded' }[] = reviewDimensions.map(dimension => ({ dimension, state: 'unknown' }))
     const issues = mechanical.issues
     let usage: ReviewView['usage'] = { state: 'unknown' }, reason = '', elapsedMs = 0
     if (generate) {
       const started = Date.now()
       try {
-        const prompt = JSON.stringify({ task: 'review-fiction', text: target.text, context: target.context,
+        const prompt = JSON.stringify({ task: 'review-fiction', text: target.text, context: target.context, range,
+          focus: 'Review only the authorized range. Check motivation, cause and effect, spatial/time continuity, viewpoint knowledge, distinct dialogue and the ending change. Optional plans are not evidence of happened events. Intentional repetitions are author exceptions.', intentionalRepetitions: request.intentionalRepetitions ?? [],
           dimensionStates: { checked: 'Check completed, whether or not issues were found.', unknown: 'The check could not be completed.', degraded: 'Only a partial check was possible because evidence is limited.' },
           format: { dimensions, issues: [{ dimension: 'continuity', severity: 'error', message: 'Problem', suggestion: 'Local change', quote: 'Exact substring', start: 0, end: 1, references: [] }] } })
         if (Buffer.byteLength(prompt, 'utf8') > 256 * 1024) throw new BookError('context-too-large')
@@ -92,6 +110,7 @@ export class ReviewStore {
         for (const voice of context.voices ?? []) references.add(voice.voiceId)
         for (const fact of JSON.parse(context.facts || '{"facts":[]}').facts ?? []) references.add(fact.factId)
         validateReviewEvidence(target.text, output.issues, references)
+        if (output.issues.some(issue => issue.start < range.start || issue.end > range.end)) throw new BookError('invalid-evidence')
         dimensions.splice(0, dimensions.length, ...output.dimensions)
         if (!target.context || !context.facts && !context.selected?.length && !context.materials) dimensions.find(item => item.dimension === 'continuity')!.state = 'degraded'
         issues.push(...output.issues.map(item => ({ ...item, issueId: randomUUID() })))
@@ -133,6 +152,11 @@ export class ReviewStore {
     if (round > 2) throw new BookError('revision-limit')
     return { round, request: { proposalId: randomUUID(), bookId, chapterId: record.request.chapterId, expectedRevision: record.request.expectedRevision,
       expectedHash: parent ? parent.request.expectedHash : record.request.expectedHash, mode: 'rewrite', instruction: `${issue.message}\n${issue.suggestion}`, materials: parent ? parent.request.materials : '',
+      ...(parent ? {
+        ...(parent.request.hardConstraints !== undefined ? { hardConstraints: parent.request.hardConstraints } : {}), ...(parent.request.intentVersion !== undefined ? { intentVersion: parent.request.intentVersion } : {}), ...(parent.request.precedingChapterIds ? { precedingChapterIds: parent.request.precedingChapterIds } : {})
+      } : {
+        ...(record.request.hardConstraints !== undefined ? { hardConstraints: record.request.hardConstraints } : {}), ...(record.request.intentVersion !== undefined ? { intentVersion: record.request.intentVersion } : {}), ...(record.request.materialIds ? { materialIds: record.request.materialIds } : {})
+      }),
       start: issue.start, end: issue.end, ...(parent ? { parentProposalId: record.request.proposalId, ...(parent.request.materialIds ? { materialIds: parent.request.materialIds } : {}), ...(parent.request.voiceIds ? { voiceIds: parent.request.voiceIds } : {}), ...(parent.request.useFacts ? { useFacts: true, knowledgeScope: parent.request.knowledgeScope } : {}) } : {}), reviewId, issueId } }
   }
 }

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { BookError, contentSchema, documentKindSchema, hash, idSchema, json, titleSchema } from './books.js'
 import type { ChapterMutationRequest, GenerationUsage, GenerateChapterRequest, ProposalView } from '../types.js'
 import { voiceDocumentSchema } from './voice.js'
+import { intentSchema } from './intents.js'
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 export const generationRequestSchema = z.strictObject({
@@ -15,7 +16,9 @@ export const generationRequestSchema = z.strictObject({
   voiceIds: z.array(idSchema).max(20).refine(ids => new Set(ids).size === ids.length).optional(),
   useFacts: z.boolean().optional(), knowledgeScope: z.union([idSchema, z.literal('reader')]).optional(),
   parentProposalId: idSchema.optional(), reviewId: idSchema.optional(), issueId: idSchema.optional(),
-})
+  hardConstraints: contentSchema.pipe(z.string().max(16_384)).optional(), intentVersion: z.int().nonnegative().optional(),
+  precedingChapterIds: z.array(idSchema).max(3).refine(ids => new Set(ids).size === ids.length).optional(),
+}).refine(request => (request.materialIds?.length ?? 0) + (request.precedingChapterIds?.length ?? 0) <= 100)
 const materialSchema = z.strictObject({ chapterId: idSchema, title: titleSchema, kind: documentKindSchema,
   revision: z.int().positive(), hash: digest, content: contentSchema })
 export const decisionSchema = z.strictObject({ bookId: idSchema, proposalId: idSchema, expectedCandidateHash: digest })
@@ -36,6 +39,7 @@ export const proposalSchema = z.strictObject({
     sources: z.array(z.strictObject({ chapterId: idSchema, revision: z.int().positive(), hash: digest, recordId: idSchema, recordHash: digest })).max(10_000) }).optional(),
   parentCandidateHash: digest.optional(), revisionRound: z.int().min(1).max(2).optional(),
   voiceContext: z.array(voiceDocumentSchema.safeExtend({ state: z.literal('active'), hash: digest })).max(20).optional(),
+  intentContext: z.strictObject({ version: z.int().nonnegative(), hash: digest, intent: intentSchema }).optional(),
 })
 export type Proposal = z.infer<typeof proposalSchema>
 
@@ -61,13 +65,14 @@ export function parseProposal(text: string, workspaceId: string, bookId: string,
   if (proposal.workspaceId !== workspaceId || proposal.request.bookId !== bookId || proposal.request.proposalId !== proposalId ||
     proposal.requestHash !== hash(json(proposal.request)) || (proposal.request.parentProposalId ? proposal.parentCandidateHash !== hash(proposal.baseline) : proposal.request.expectedHash !== hash(proposal.baseline)) ||
     proposal.candidateHash !== hash(candidate(proposal)) || !contentSchema.safeParse(candidate(proposal)).success) throw new BookError('invalid-format')
-  const selected = proposal.request.materialIds ?? []
+  const selected = [...(proposal.request.materialIds ?? []), ...(proposal.request.precedingChapterIds ?? [])]
   const context = proposal.context ?? []
   if (context.length !== selected.length || context.some((item, index) => item.chapterId !== selected[index] || item.hash !== hash(item.content))) throw new BookError('invalid-format')
   if ((proposal.voiceContext ?? []).length !== (proposal.request.voiceIds ?? []).length || proposal.voiceContext?.some((item, index) => {
     const { state: _state, hash: digest, ...document } = item
     return item.voiceId !== proposal.request.voiceIds![index] || !item.authorized || digest !== hash(json(document))
   })) throw new BookError('invalid-format')
+  if (proposal.request.intentVersion !== proposal.intentContext?.version || proposal.intentContext && proposal.intentContext.hash !== hash(json(proposal.intentContext.intent))) throw new BookError('invalid-format')
   validateRange(proposal.request, proposal.baseline)
   return proposal
 }
@@ -85,7 +90,9 @@ export function proposalView(proposal: Proposal, state: ProposalView['state'], r
     baselineHash: proposal.request.expectedHash, baseline: proposal.baseline, start: proposal.request.start, end: proposal.request.end,
     replacement: proposal.replacement, candidate: candidate(proposal), candidateHash: proposal.candidateHash,
     instruction: proposal.request.instruction, materials: proposal.request.materials, elapsedMs: proposal.elapsedMs, usage: proposal.usage as GenerationUsage,
-    ...(proposal.context ? { context: proposal.context } : {}), ...(proposal.revisionRound ? { revisionRound: proposal.revisionRound } : {}) }
+    ...(proposal.context ? { context: proposal.context } : {}), ...(proposal.revisionRound ? { revisionRound: proposal.revisionRound } : {}),
+    ...(proposal.request.hardConstraints !== undefined ? { hardConstraints: proposal.request.hardConstraints } : {}),
+    ...(proposal.intentContext ? { intentContext: proposal.intentContext } : {}) }
 }
 
 export function generationPrompt(proposal: Proposal): string {
@@ -93,6 +100,8 @@ export function generationPrompt(proposal: Proposal): string {
   const planning = proposal.documentKind && proposal.documentKind !== 'chapter'
   return JSON.stringify({ task: planning && proposal.request.mode === 'draft' ? 'Create or improve the requested material, replacing the authorized text.' : modes[proposal.request.mode], instruction: proposal.request.instruction,
     authorMaterials: proposal.request.materials, chapter: proposal.baseline,
+    ...(proposal.request.hardConstraints || proposal.intentContext?.intent.hardConstraints ? { hardConstraints: [proposal.request.hardConstraints ?? '', proposal.intentContext?.intent.hardConstraints ?? ''].filter(Boolean), constraintBoundary: 'Author hard constraints take priority. Do not omit, weaken or reinterpret them to fit a budget.' } : {}),
+    ...(proposal.intentContext ? { sceneIntent: proposal.intentContext.intent, intentBoundary: 'Optional author direction, not established story facts. A scene need not follow a fixed conflict template.' } : {}),
     ...(proposal.documentKind && proposal.documentKind !== 'chapter' ? { documentKind: proposal.documentKind, planningTask: 'Write only the requested planning document. Planned events are not established story facts.' } : {}),
     ...(proposal.context?.length ? { selectedMaterials: proposal.context, planningBoundary: 'Plans describe possible future events, not events that have already happened.',
       ...(proposal.context.some(item => item.kind === 'chapter') ? { sourceBoundary: 'Sources with kind=chapter are saved prose. When organizing materials from prose, distinguish what the text says from proposed additions and unknowns. Do not invent evidence, assume off-page events, or convert plans into established facts. This material does not update the evidence-backed fact records.' } : {}) } : {}),
