@@ -75,6 +75,18 @@ test('real Cordis service dispatches candidate remotes with optional model servi
   setSandboxMode(session, 'workspace-write')
   assert.equal((await ctx.superNovel.acceptProposal(sessionId, decision, signal)).state, 'accepted')
   assert.equal((await ctx.superNovel.chapter(sessionId, book.bookId, chapterId, signal)).content, '正式采纳前的候选。')
+  const library = await ctx.superNovel.library(sessionId, signal), callsBeforeReading = calls
+  setSandboxMode(session, 'read-only')
+  const searchRequest = { workspaceId: library.workspaceId, bookId: book.bookId, query: '正式采纳', kind: 'chapter', includeArchived: false, offset: 0 }
+  const found = await ctx.superNovel.searchBook(sessionId, searchRequest, signal)
+  assert.equal(found.total, 1); assert.equal(found.items[0].quote, '正式采纳')
+  const previewRequest = { workspaceId: library.workspaceId, bookId: book.bookId, chapterId, proposalId: request.proposalId }
+  const documentPreview = await ctx.superNovel.documentPreview(sessionId, previewRequest, signal)
+  assert.equal(documentPreview.document.content, '正式采纳前的候选。'); assert.equal(documentPreview.proposal.proposalId, request.proposalId)
+  assert.equal(calls, callsBeforeReading)
+  await assert.rejects(ctx.superNovel.searchBook(sessionId, { ...searchRequest, workspaceId: '0'.repeat(64) }, signal), error => error.details.reason === 'location-changed')
+  await assert.rejects(ctx.superNovel.documentPreview(sessionId, { ...previewRequest, workspaceId: '0'.repeat(64) }, signal), error => error.details.reason === 'location-changed')
+  setSandboxMode(session, 'workspace-write')
   assert.equal(scheduled.length, 1)
   scheduled.shift()(); await Promise.all([...ctx.superNovel.backupJobs])
   const backups = await BackupStore.at(root), list = await backups.list(book.bookId)

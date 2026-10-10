@@ -14,6 +14,8 @@ import { z } from 'zod'
 import { idSchema, titleSchema, materialKind } from './domain/books.js'
 import { BookError, hash } from './domain/books.js'
 import { MaterialCatalog } from './host/material-catalog.js'
+import { BookSearch } from './host/book-search.js'
+import type { BookSearchRequest, BookSearchResult, DocumentPreviewRequest, DocumentPreview } from './types.js'
 import type { UpgradeBookRequest, MaterialMetadataRequest, MaterialSearchRequest, MaterialSearchResult, MaterialReferences, SelectionMaterialRequest } from './types.js'
 import { BackupStore } from './host/backup-store.js'
 import type { BackupSettings, BackupSummary, BackupPreview, BackupHealth, BackupQuery, BackupConfiguration, RestoreBackupRequest } from './types.js'
@@ -303,6 +305,35 @@ export class SuperNovel extends TypertRemoteService {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
       return await (await MaterialCatalog.at(scope.root, scope.store)).search(request, signal)
+    })
+  }
+
+  /** Search saved text in one explicitly selected library without a model call. */
+  @Remote
+  async searchBook(sessionId: string, request: BookSearchRequest, signal: AbortSignal): Promise<BookSearchResult> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, false, signal)
+      return await (await BookSearch.at(scope.root, scope.store)).search(request, signal)
+    })
+  }
+
+  /** Library-bound reading of a document, its references and an optional candidate. */
+  @Remote
+  async documentPreview(sessionId: string, input: DocumentPreviewRequest, signal: AbortSignal): Promise<DocumentPreview> {
+    return await storageResult(async () => {
+      const request = z.strictObject({ workspaceId: z.string(), bookId: idSchema, chapterId: idSchema, proposalId: z.union([idSchema, z.literal('')]) }).parse(input)
+      const scope = await this.backupScope(sessionId, request.workspaceId, false, signal)
+      const document = await scope.store.readChapter(request.bookId, request.chapterId)
+      const item = document.book.chapters.find(item => item.chapterId === request.chapterId)!
+      if (item.kind && item.kind !== 'chapter' && !materialKind(item.kind)) throw new BookError('invalid-material')
+      const references = materialKind(item.kind) ? await (await MaterialCatalog.at(scope.root, scope.store)).references(request.bookId, request.chapterId, signal)
+        : { linkedChapterIds: [], outgoing: [], incoming: [], uses: [], evidenceChapterIds: [], draftBranches: 0, complete: true }
+      if (!request.proposalId) return { workspaceId: scope.workspaceId, document, references }
+      const store = await ProposalStore.at(scope.root, scope.workspaceId, scope.store)
+      const proposal = await store.view(request.bookId, request.proposalId, this.tasks.active(store, request.bookId, request.proposalId))
+      if (proposal.chapterId !== request.chapterId) throw new BookError('proposal-not-found')
+      signal.throwIfAborted()
+      return { workspaceId: scope.workspaceId, document, references, proposal }
     })
   }
 

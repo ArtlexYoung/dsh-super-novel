@@ -426,6 +426,23 @@ export interface MaterialSearchRequest {
   readonly linkedChapterId: string; readonly favorite: boolean; readonly offset: number
 }
 export interface MaterialSearchResult { readonly items: readonly ChapterSummary[]; readonly total: number; readonly complete: boolean; readonly externalIds: readonly string[]; readonly revision: number }
+export interface BookSearchRequest {
+  readonly workspaceId: string; readonly bookId: string; readonly query: string; readonly kind: string
+  readonly includeArchived: boolean; readonly offset: number
+}
+export interface BookSearchHit {
+  readonly chapterId: string; readonly title: string; readonly kind: string; readonly revision: number; readonly hash: string
+  readonly start: number; readonly end: number; readonly quote: string; readonly snippet: string
+  readonly externallyModified: boolean; readonly archived: boolean
+}
+export interface BookSearchResult {
+  readonly workspaceId: string; readonly bookId: string; readonly revision: number; readonly items: readonly BookSearchHit[]
+  readonly total: number; readonly complete: boolean; readonly scanned: number; readonly skipped: number
+}
+export interface DocumentPreviewRequest { readonly workspaceId: string; readonly bookId: string; readonly chapterId: string; readonly proposalId: string }
+export interface DocumentPreview {
+  readonly workspaceId: string; readonly document: ChapterText; readonly references: MaterialReferences; readonly proposal?: ProposalView
+}
 export interface MaterialReferences {
   readonly linkedChapterIds: readonly string[]; readonly outgoing: readonly string[]; readonly incoming: readonly string[]
   readonly uses: readonly { readonly proposalId: string; readonly chapterId: string; readonly revision: number; readonly hash: string; readonly stale: boolean; readonly state: string }[]

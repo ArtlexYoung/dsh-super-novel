@@ -2,10 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Input, IconChevronLeftOutline14, IconSearchOutline16 } from './primitives.js'
 import { Select } from './controls.js'
 import { materialKinds } from './materials.js'
+import { DocumentLinks } from './document-links.js'
 import { unwrap } from './books.js'
 
 /** Reading a reference never changes the active chapter, selection, or writing baseline. */
-export function ReferencePanel({ api, sessionId, book, chapterId, open, writable, workspaceId, t, edit, manage }) {
+export function ReferencePanel({ api, sessionId, book, chapterId, open, writable, workspaceId, t, edit, navigate, manage }) {
   const [query, setQuery] = useState(''), [kind, setKind] = useState('all'), [selected, setSelected] = useState('')
   const [view, setView] = useState({ kind: 'idle' }), [filter, setFilter] = useState('all'), [searchResult, setSearchResult] = useState(null)
   const preferenceKey = `super-novel.references:${workspaceId}:${book.bookId}`
@@ -31,11 +32,11 @@ export function ReferencePanel({ api, sessionId, book, chapterId, open, writable
     previewHeading.current?.focus({ preventScroll: true })
     const controller = new AbortController()
     setView({ kind: 'loading' })
-    api.chapter(sessionId, book.bookId, item.chapterId, controller.signal).then(unwrap).then(value => {
-      if (!controller.signal.aborted) setView({ kind: 'ready', value })
+    api.documentPreview(sessionId, { workspaceId, bookId: book.bookId, chapterId: item.chapterId, proposalId: '' }, controller.signal).then(unwrap).then(value => {
+      if (!controller.signal.aborted) setView({ kind: 'ready', value: value.document, references: value.references })
     }).catch(error => { if (!controller.signal.aborted) setView({ kind: 'error', reason: error.reason ?? 'storage-failed' }) })
     return () => controller.abort()
-  }, [api, sessionId, book.bookId, book.revision, item?.chapterId, open])
+  }, [api, sessionId, workspaceId, book.bookId, book.revision, item?.chapterId, open])
   return <div className="sn-reference-panel">
     {item ? <>
       <Button size="sm" className="sn-reference-back" onClick={() => setSelected('')}><IconChevronLeftOutline14 />{t('referenceList')}</Button>
@@ -43,7 +44,7 @@ export function ReferencePanel({ api, sessionId, book, chapterId, open, writable
       <h3 tabIndex={-1} ref={previewHeading}>{item.title}</h3><Button size="sm" aria-pressed={preferences.pinned.includes(item.chapterId)} disabled={!preferences.pinned.includes(item.chapterId) && preferences.pinned.length >= 20} onClick={() => remember({ ...preferences, pinned: preferences.pinned.includes(item.chapterId) ? preferences.pinned.filter(id => id !== item.chapterId) : [...preferences.pinned, item.chapterId] })}>{t('pinReference')}</Button>
       {view.kind === 'loading' && <p role="status">{t('loading')}</p>}
       {view.kind === 'error' && <p role="alert">{t(view.reason)}</p>}
-      {view.kind === 'ready' && <><p className="sn-notice">{t('savedReferenceHint')}</p><pre className="sn-reference-text">{view.value.content || t('emptyReference')}</pre><Button size="sm" disabled={!writable} onClick={() => edit(item.chapterId)}>{t('editReference')}</Button></>}
+      {view.kind === 'ready' && <><p className="sn-notice">{t('savedReferenceHint')}</p><pre className="sn-reference-text">{view.value.content || t('emptyReference')}</pre><Button size="sm" disabled={!writable} onClick={() => edit(item.chapterId)}>{t('editReference')}</Button><DocumentLinks book={view.value.book} item={item} references={view.references} t={t} navigate={navigate} /></>}
     </> : <>
       <div className="sn-modes" role="group" aria-label={t('referenceFilter')}>{['all', 'chapter', 'favorite', 'pinned', 'recent'].map(value => <Button size="sm" key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{t('reference-' + value)}</Button>)}</div>
       <div className="sn-search"><IconSearchOutline16 /><Input className="sn-input" type="search" aria-label={t('searchReferences')} placeholder={t('searchHint')} value={query} onChange={event => setQuery(event.target.value)} /></div>

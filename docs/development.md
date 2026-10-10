@@ -92,3 +92,5 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 写作辅助用 `scripts/browser-writing-methods.ts` 验证意图输入保留、磁盘版本、AI 方向编辑、纯读上下文和局部审校候选。`test/writing-methods.test.ts` 覆盖幂等、冲突、来源变化、预算、引用越界、范围保护和备份包含意图。
 
 跨章状态用 `scripts/browser-story-state.ts` 验证手工事件、可编辑建议、明确确认、两章伏笔、纯读上下文与修改影响。`test/story-state.test.ts` 包含五章序列、人物知情隔离、来源变化、前章重排、采纳中断重放和损坏格式。`test/proposal-host.test.ts` 用真实 Host 的备份任务核对 AI 与事实采纳后的归档，定时等待在测试中提前触发。
+
+整书查找使用 `scripts/browser-navigation.ts` 检查已保存正文/资料、命中片段、双向引用、前进返回、正文撤销/重做、保存后刷新位置、精确打开原文、草稿失败阻止切章、过期证据和 300/420px、900px 全屏，核对查询零模型调用。`test/book-search.test.ts` 覆盖字面匹配、中文/Unicode 位置、分页、范围隔离、取消和读取预算；`test/writing-position.test.ts` 覆盖位置与存储失败；`test/editor-history.test.ts` 覆盖输入分组、组字、范围替换、重做与内存边界。

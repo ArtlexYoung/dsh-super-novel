@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Button, Input } from './primitives.js'
 import { Select } from './controls.js'
 import { materialKinds } from './materials.js'
+import { DocumentLinks } from './document-links.js'
 import { unwrap } from './books.js'
 
 const links = item => [...new Set([...(item.linkedChapterIds ?? []), ...(item.linkedChapterId ? [item.linkedChapterId] : [])])]
-export function MaterialLibrary({ api, sessionId, workspaceId, book, writable, t, changed, edit, beforeGenerate, candidate }) {
+export function MaterialLibrary({ api, sessionId, workspaceId, book, writable, t, changed, edit, navigate, beforeGenerate, candidate }) {
   const [query, setQuery] = useState(''), [kind, setKind] = useState('all'), [status, setStatus] = useState('available'), [favorite, setFavorite] = useState(false), [tag, setTag] = useState(''), [linked, setLinked] = useState(''), [offset, setOffset] = useState(0), [linkQuery, setLinkQuery] = useState('')
   const [result, setResult] = useState(null), [selected, setSelected] = useState(''), [detail, setDetail] = useState(null), [references, setReferences] = useState(null)
   const [form, setForm] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState('')
@@ -65,7 +66,7 @@ export function MaterialLibrary({ api, sessionId, workspaceId, book, writable, t
         <Button size="sm" variant="primary" disabled={!writable || busy} onClick={() => save(form)}>{t('saveMaterialDetails')}</Button>
         {['archived', 'trashed'].includes(item.status) && <Button size="sm" disabled={!writable || busy} onClick={() => save({ ...form, status: 'active' })}>{t('restoreMaterial')}</Button>}
       </details>}
-      {references && <details><summary>{t('sourcesAndUses')}</summary><p>{t('linkedChapters')}: {references.linkedChapterIds.map(id => book.chapters.find(item => item.chapterId === id)?.title).join('、') || t('none')}</p><p>{t('backlinks')}: {references.incoming.map(id => book.chapters.find(item => item.chapterId === id)?.title).join('、') || t('none')}</p><p>{t('evidenceSources')}: {references.evidenceChapterIds.map(id => book.chapters.find(item => item.chapterId === id)?.title).join('、') || t('none')}</p><ul>{references.uses.map(use => <li key={use.proposalId}>{book.chapters.find(item => item.chapterId === use.chapterId)?.title} · v{use.revision} · {use.state}{use.stale ? ` · ${t('sourceChanged')}` : ''}</li>)}</ul>{!references.complete && <p role="status">{t('searchIncomplete')}</p>}</details>}
+      {references && <DocumentLinks book={book} item={item} references={references} t={t} navigate={navigate} />}
     </> : <>
       <Input className="sn-input" type="search" aria-label={t('fulltextMaterials')} placeholder={t('fulltextMaterials')} value={query} onChange={event => setQuery(event.target.value)} />
       <div className="sn-row"><Select aria-label={t('referenceType')} value={kind} onChange={event => setKind(event.target.value)}><option value="all">{t('allMaterialTypes')}</option>{materialKinds.map(value => <option key={value} value={value}>{t(value)}</option>)}</Select><Button size="sm" aria-pressed={favorite} onClick={() => setFavorite(value => !value)}>{t('favorite')}</Button></div>
