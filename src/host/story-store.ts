@@ -13,6 +13,7 @@ const recordSchema = z.strictObject({ format: z.literal('super-novel-story-state
 const suggestionSchema = z.strictObject({ format: z.literal('super-novel-story-suggestion'), version: z.literal(1), request: suggestStorySchema, sourceRevision: z.int().positive(), rejected: z.boolean().optional(), events: z.array(eventSchema).max(50), foreshadows: z.array(foreshadowSchema).max(50), createdAt: z.int().nonnegative(), elapsedMs: z.int().nonnegative(), usage: z.discriminatedUnion('state', [z.strictObject({ state: z.literal('unknown') }), z.strictObject({ state: z.literal('reported'), inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative(), cacheReadTokens: z.int().nonnegative().optional(), cacheWriteTokens: z.int().nonnegative().optional(), totalTokens: z.int().nonnegative().optional(), reasoningTokens: z.int().nonnegative().optional() })]) })
 type Ledger = { version: number; events: StoryEvent[]; foreshadows: Foreshadow[] }
 type Suggestion = z.infer<typeof suggestionSchema>
+export { recordSchema as storyRecordSchema, suggestionSchema as storySuggestionSchema }
 
 /** Author-confirmed evidence ledger, independent from character cards and prose. */
 export class StoryStore {

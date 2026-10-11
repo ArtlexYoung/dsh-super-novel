@@ -17,7 +17,8 @@ export function useFormDraft({ api, sessionId, workspaceId, book, chapterId, bra
       settle: request => api.dismissFormDraft(sessionId, { ...request, kind }, new AbortController().signal).then(unwrap),
       changed: state => { if (live.current) setStatus(state) },
     })
-    if (own.current.kind === 'found') { writer.current.sequence = own.current.value.sequence; writer.current.latest = own.current.value }
+    writer.current.sequence = cache.current.sequence(branchId)
+    if (own.current.kind === 'found') writer.current.latest = own.current.value
   }
   useEffect(() => {
     live.current = true
@@ -60,7 +61,7 @@ export function useFormDraft({ api, sessionId, workspaceId, book, chapterId, bra
 
 export function FormDraftStatus({ draft, t }) {
   if (draft.status.kind === 'formal') return <></>
-  return <p className="sn-notice sn-form-draft-status" role={['failed', 'browser-failed'].includes(draft.status.kind) ? 'alert' : 'status'}>
+  return <p className="sn-notice sn-form-draft-status" data-state={draft.status.kind} data-reason={draft.status.reason} role={['failed', 'browser-failed'].includes(draft.status.kind) ? 'alert' : 'status'}>
     {t('form-draft-' + draft.status.kind)}{['failed', 'browser-failed'].includes(draft.status.kind) && <Button size="sm" onClick={draft.retry}>{t('retryDraft')}</Button>}
   </p>
 }

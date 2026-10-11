@@ -69,7 +69,7 @@ export function MaterialDetail({ api, sessionId, workspaceId, book, item, branch
         if (live.current) { setGeneration(null); candidate(item.chapterId, value.proposalId) }
       })}>{t('materialAIConfirm')}</Button><Button size="sm" disabled={busy} onClick={() => setGeneration(null)}>{t('cancel')}</Button></div>
     </section>}
-    {book.schemaVersion === 2 && <details className="sn-material-organize"><summary>{t('organizeMaterial')}{unsaved ? ` · ${t('unconfirmedForm')}` : ''}</summary>
+    {book.schemaVersion >= 2 && <details className="sn-material-organize"><summary>{t('organizeMaterial')}{unsaved ? ` · ${t('unconfirmedForm')}` : ''}</summary>
       <FormDraftStatus draft={draft} t={t} />
       {conflict && unsaved && <div role="alert"><p>{t('formMetadataConflict')}</p><details><summary>{t('currentMaterialDetails')}</summary>{preview(current)}</details><Button size="sm" disabled={busy || !writable} onClick={() => draft.update({ ...draft.value, base: current })}>{t('rebaseFormInput')}</Button></div>}
       <fieldset className="sn-material-form" disabled={busy || !writable} onCompositionStart={() => draft.composing(true)} onCompositionEnd={() => draft.composing(false)}>

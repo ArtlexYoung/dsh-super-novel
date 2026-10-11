@@ -1,4 +1,6 @@
 const memory = new Map<string, any>()
+// Retiring content must not reset the sequence when this page reopens a form.
+const sequences = new Map<string, number>()
 const uuid = (value: unknown): boolean => typeof value === 'string' && /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(value)
 const text = (value: unknown, max: number): boolean => typeof value === 'string' && value.length <= max && !value.includes('\0')
 const ids = (value: unknown): boolean => Array.isArray(value) && value.length <= 1000 && value.every(uuid)
@@ -22,12 +24,19 @@ function story(value): boolean {
     (value.time?.kind === 'unknown' || value.time?.kind === 'known' && text(value.time.label, 200) && Number.isFinite(value.time.order) && Math.abs(value.time.order) <= 1_000_000) &&
     Array.isArray(value.changes) && value.changes.length <= 100 && value.changes.every(change => (change.characterId === '' || uuid(change.characterId)) && ['location', 'injury', 'item', 'knowledge'].includes(change.kind) && text(change.value, 2000))
 }
+function structure(value): boolean {
+  return !!value && Array.isArray(value.volumes) && value.volumes.length <= 1000 && value.volumes.every(item => uuid(item.volumeId) && text(item.title, 200)) &&
+    Array.isArray(value.storylines) && value.storylines.length <= 1000 && value.storylines.every(item => uuid(item.storylineId) && text(item.title, 200)) &&
+    Array.isArray(value.chapters) && value.chapters.length <= 10_000 && value.chapters.every(item => uuid(item.chapterId) && (item.volumeId === '' || uuid(item.volumeId)) &&
+      ids(item.storylineIds) && item.storylineIds.length <= 100 && new Set(item.storylineIds).size === item.storylineIds.length && text(item.summary, 4000) && ['unwritten', 'draft', 'revise', 'complete'].includes(item.progress))
+}
 export function readFormEnvelope(content: string, kind: string): { kind: 'found'; value: any } | { kind: 'absent' } {
   try {
-    if (new TextEncoder().encode(content).length > 1024 * 1024) return { kind: 'absent' }
+    if (new TextEncoder().encode(content).length > (kind === 'structure' ? 4 : 1) * 1024 * 1024) return { kind: 'absent' }
     const value = JSON.parse(content)
     if (value?.schemaVersion !== 1 || value.kind !== kind) return { kind: 'absent' }
-    if (kind === 'material' ? material(value.base) && material(value.form) : kind === 'story' && Number.isSafeInteger(value.base) && value.base >= 0 && (!value.sourceProposalId || uuid(value.sourceProposalId)) && story(value.form)) return { kind: 'found', value }
+    const valid = kind === 'material' ? material(value.base) && material(value.form) : kind === 'story' ? Number.isSafeInteger(value.base) && value.base >= 0 && (!value.sourceProposalId || uuid(value.sourceProposalId)) && story(value.form) : kind === 'structure' && Number.isSafeInteger(value.base) && value.base > 0 && structure(value.form)
+    if (valid) return { kind: 'found', value }
   } catch { /* Invalid cache data is never restored as a form. */ }
   return { kind: 'absent' }
 }
@@ -50,9 +59,9 @@ export class FormDraftCache {
     if (memory.has(key)) return { kind: 'found', value: memory.get(key) }
     try {
       const raw = this.storage().getItem(key)
-      if (raw && raw.length <= 2 * 1024 * 1024) {
+      if (raw && raw.length <= (this.kind === 'structure' ? 8 : 2) * 1024 * 1024) {
         const value = JSON.parse(raw)
-        if (this.valid(value)) { memory.set(key, value); return { kind: 'found', value } }
+        if (this.valid(value)) { memory.set(key, value); sequences.set(key, Math.max(sequences.get(key) ?? 0, value.sequence)); return { kind: 'found', value } }
       }
     } catch { /* A failed browser read leaves disk recovery available. */ }
     return { kind: 'absent' }
@@ -67,11 +76,16 @@ export class FormDraftCache {
     } catch { /* Return the scoped in-memory copies. */ }
     return [...memory.entries()].filter(([key]) => key.startsWith(this.prefix())).map(([, value]) => value).filter(value => this.valid(value))
   }
+  sequence(branchId: string): number {
+    const own = this.read(branchId)
+    return Math.max(sequences.get(this.prefix() + branchId) ?? 0, own.kind === 'found' ? own.value.sequence : 0)
+  }
   async write(request): Promise<boolean> {
     if (!this.valid(request)) throw new Error('invalid-form-draft')
     const key = this.key(request), prior = memory.get(key)
     if (prior && prior.sequence > request.sequence) return false
     memory.set(key, request)
+    sequences.set(key, Math.max(sequences.get(key) ?? 0, request.sequence))
     this.storage().setItem(key, JSON.stringify(request))
     return true
   }

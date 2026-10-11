@@ -18,15 +18,45 @@ export interface ChapterSummary {
   readonly linkedChapterIds?: readonly string[]
   readonly relatedMaterialIds?: readonly string[]
   readonly sourceEvidence?: MaterialSourceEvidence
+  readonly structure?: ChapterStructure
 }
+export type ChapterProgress = 'unwritten' | 'draft' | 'revise' | 'complete'
+export interface ChapterStructure { readonly volumeId: string; readonly storylineIds: readonly string[]; readonly summary: string; readonly progress: ChapterProgress }
+export interface BookVolume { readonly volumeId: string; readonly title: string }
+export interface BookStoryline { readonly storylineId: string; readonly title: string }
+export interface BookStructure {
+  readonly volumes: readonly BookVolume[]; readonly storylines: readonly BookStoryline[]
+  readonly chapters: readonly (ChapterStructure & { readonly chapterId: string })[]
+}
+export interface BookStructureRequest { readonly workspaceId: string; readonly bookId: string; readonly expectedRevision: number; readonly operationId: string; readonly structure: BookStructure }
+export interface UpdateBookStructureRequest extends BookStructureRequest { readonly previewHash: string }
+export interface BookStructureQuery { readonly workspaceId: string; readonly bookId: string }
+export interface StructureQuery extends BookStructureQuery { readonly offset: number; readonly query: string; readonly volumeId: string; readonly storylineId: string; readonly progress: string }
+export interface BookOutline {
+  readonly revision: number; readonly structureHash: string; readonly total: number; readonly complete: boolean; readonly unreadable: number
+  readonly items: readonly { readonly chapterId: string; readonly title: string; readonly position: number; readonly structure: ChapterStructure; readonly goal: string; readonly viewpoint: string; readonly sceneIds: readonly string[] }[]
+}
+export interface StructureImpacts {
+  readonly complete: boolean; readonly unreadable: number; readonly scanned: number; readonly sourceHash: string
+  readonly items: readonly { readonly kind: 'facts' | 'material' | 'proposal' | 'review' | 'event' | 'foreshadow' | 'intent' | 'fact-suggestion' | 'story-suggestion'; readonly id: string; readonly chapterId: string; readonly title: string }[]
+}
+export interface BookStructurePreview {
+  readonly revision: number; readonly previewHash: string; readonly movedChapterIds: readonly string[]
+  readonly changes: readonly { readonly chapterId: string; readonly title: string; readonly beforePosition: number; readonly afterPosition: number; readonly before: ChapterStructure; readonly after: ChapterStructure }[]
+  readonly impacts: StructureImpacts
+}
+export interface StructureUndo { readonly available: boolean; readonly operationId: string; readonly structure?: BookStructure }
 export type DocumentKind = 'chapter' | 'seed' | 'book-card' | 'character' | 'world' | 'outline' | 'chapter-outline' | 'scene' | 'facts' | 'voice'
 export interface BookSnapshot {
-  readonly schemaVersion: 1 | 2
+  readonly schemaVersion: 1 | 2 | 3
   readonly bookId: string
   readonly title: string
   readonly revision: number
   readonly chapters: readonly ChapterSummary[]
   readonly recoveryRequired: boolean
+  readonly volumes?: readonly BookVolume[]
+  readonly storylines?: readonly BookStoryline[]
+  readonly lastStructureOperationId?: string
 }
 export interface LibrarySnapshot {
   readonly workspace: string
@@ -443,10 +473,10 @@ export interface MaterialSearchRequest {
   readonly linkedChapterId: string; readonly favorite: boolean; readonly offset: number
   readonly attention?: 'all' | 'untagged' | 'unlinked' | 'stale'
 }
-export interface FormDraftQuery extends DraftQuery { readonly kind: 'material' | 'story' }
-export interface FormDraftRequest extends DraftRequest { readonly kind: 'material' | 'story' }
-export interface FormDraftVersionQuery extends DraftVersionQuery { readonly kind: 'material' | 'story' }
-export interface SettleFormDraftRequest extends SettleDraftRequest { readonly kind: 'material' | 'story'; readonly action: 'dismissed' }
+export interface FormDraftQuery extends DraftQuery { readonly kind: 'material' | 'story' | 'structure' }
+export interface FormDraftRequest extends DraftRequest { readonly kind: 'material' | 'story' | 'structure' }
+export interface FormDraftVersionQuery extends DraftVersionQuery { readonly kind: 'material' | 'story' | 'structure' }
+export interface SettleFormDraftRequest extends SettleDraftRequest { readonly kind: 'material' | 'story' | 'structure'; readonly action: 'dismissed' }
 export interface MaterialBatchRequest {
   readonly workspaceId: string; readonly bookId: string; readonly expectedRevision: number; readonly operationId: string
   readonly chapterIds: readonly string[]; readonly action: 'add-tags' | 'link-chapter' | 'archive'; readonly tags: readonly string[]; readonly linkedChapterId: string

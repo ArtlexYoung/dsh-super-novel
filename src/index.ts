@@ -31,6 +31,8 @@ import { ProposalStore } from './host/proposal-store.js'
 import { IntentStore } from './host/intent-store.js'
 import { StoryStore } from './host/story-store.js'
 import { chapterImpacts } from './host/chapter-impacts.js'
+import { BookStructureStore, structureQuerySchema } from './host/book-structure.js'
+import type { BookStructureQuery, StructureQuery, BookOutline, BookStructureRequest, UpdateBookStructureRequest, BookStructurePreview, StructureUndo } from './types.js'
 import type { StoryState, SaveStoryStateRequest, SuggestStoryStateRequest, StoryStateSuggestion, ChapterImpacts } from './types.js'
 import type { ChapterIntent, SaveIntentRequest, SuggestIntentRequest, IntentSuggestion, GenerationContextPreview } from './types.js'
 import { ProposalTasks } from './host/proposal-tasks.js'
@@ -293,6 +295,58 @@ export class SuperNovel extends TypertRemoteService {
     })
   }
 
+  /** Explicit v3 activation after a complete verified backup, preserving every document ID and byte. */
+  @Remote
+  async enableBookStructure(sessionId: string, input: UpgradeBookRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => {
+      const request = z.strictObject({ workspaceId: z.string().regex(/^[a-f\d]{64}$/), bookId: idSchema, expectedRevision: z.int().positive(), operationId: idSchema, backupId: idSchema }).parse(input)
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal), book = await scope.store.readBook(request.bookId)
+      if (book.schemaVersion < 3) {
+        if (book.recoveryRequired) throw new BookError('recovery-required')
+        if (book.revision !== request.expectedRevision) throw new BookError('revision-conflict')
+        const backups = await BackupStore.at(scope.root)
+        await (await StorageLocations.at(scope.defaultRoot)).validate((await backups.settings()).root, scope.mode)
+        const backup = await backups.create(request.bookId, request.backupId, signal)
+        if (backup.revision !== request.expectedRevision || backup.recoveryRequired) throw new BookError('revision-conflict')
+      }
+      return await this.backedUp(scope.root, request.bookId, sessionId, scope.store.upgrade(request.bookId, request.expectedRevision, request.operationId, signal, 3))
+    })
+  }
+
+  @Remote
+  async bookOutline(sessionId: string, request: StructureQuery, signal: AbortSignal): Promise<BookOutline> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, false, signal)
+      return await (await BookStructureStore.at(scope.root, scope.workspaceId, scope.store)).outline(request, signal)
+    })
+  }
+
+  @Remote
+  async previewBookStructure(sessionId: string, request: BookStructureRequest, signal: AbortSignal): Promise<BookStructurePreview> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, false, signal)
+      return await (await BookStructureStore.at(scope.root, scope.workspaceId, scope.store)).preview(request, signal)
+    })
+  }
+
+  @Remote
+  async updateBookStructure(sessionId: string, request: UpdateBookStructureRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      const value = await (await BookStructureStore.at(scope.root, scope.workspaceId, scope.store)).update(request, signal)
+      this.scheduleBackup(scope.root, request.bookId, sessionId)
+      return value
+    })
+  }
+
+  @Remote
+  async undoBookStructure(sessionId: string, input: BookStructureQuery, signal: AbortSignal): Promise<StructureUndo> {
+    return await storageResult(async () => {
+      const request = structureQuerySchema.parse(input), scope = await this.backupScope(sessionId, request.workspaceId, false, signal)
+      return await (await BookStructureStore.at(scope.root, scope.workspaceId, scope.store)).undo(request, signal)
+    })
+  }
+
   @Remote
   async updateMaterial(sessionId: string, request: MaterialMetadataRequest, signal: AbortSignal): Promise<BookSnapshot> {
     return await storageResult(async () => {
@@ -429,7 +483,7 @@ export class SuperNovel extends TypertRemoteService {
       const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
       if (!materialKind(request.kind)) throw new BookError('invalid-material')
       const source = await scope.store.readChapter(request.bookId, request.sourceChapterId), metadata = source.book.chapters.find(item => item.chapterId === request.sourceChapterId)!
-      if (source.book.schemaVersion !== 2) throw new BookError('migration-required')
+      if (source.book.schemaVersion < 2) throw new BookError('migration-required')
       if (source.book.revision !== request.expectedRevision || source.hash !== request.sourceHash || source.externallyModified) throw new BookError('revision-conflict')
       if (request.end <= request.start || request.end > source.content.length) throw new BookError('invalid-evidence')
       const quote = source.content.slice(request.start, request.end)

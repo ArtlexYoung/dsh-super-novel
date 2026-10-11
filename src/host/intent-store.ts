@@ -12,6 +12,7 @@ const recordSchema = z.strictObject({ format: z.literal('super-novel-intent'), v
 const suggestionSchema = z.strictObject({ format: z.literal('super-novel-directions'), version: z.literal(1), request: suggestIntentSchema, directions: directionsSchema.shape.directions, rejected: z.boolean().optional(),
   createdAt: z.int().nonnegative(), elapsedMs: z.int().nonnegative(), usage: z.discriminatedUnion('state', [z.strictObject({ state: z.literal('unknown') }), z.strictObject({ state: z.literal('reported'), inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative(), cacheReadTokens: z.int().nonnegative().optional(), cacheWriteTokens: z.int().nonnegative().optional(), totalTokens: z.int().nonnegative().optional(), reasoningTokens: z.int().nonnegative().optional() })]) })
 type Suggestion = z.infer<typeof suggestionSchema>
+export { recordSchema as intentRecordSchema, suggestionSchema as intentSuggestionSchema }
 
 /** Optional author plans: immutable versions, never prose or established facts. */
 export class IntentStore {

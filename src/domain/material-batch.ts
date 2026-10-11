@@ -13,7 +13,7 @@ export function prepareMaterialBatch(view: BookSnapshot, input: MaterialBatchReq
   const request = materialBatchSchema.parse(input)
   if (view.bookId !== request.bookId) throw new BookError('book-not-found')
   if (view.recoveryRequired) throw new BookError('recovery-required')
-  if (view.schemaVersion !== 2) throw new BookError('migration-required')
+  if (view.schemaVersion < 2) throw new BookError('migration-required')
   if (view.revision !== request.expectedRevision) throw new BookError('revision-conflict')
   if (request.action === 'link-chapter' && !view.chapters.some(item => item.chapterId === request.linkedChapterId && (!item.kind || item.kind === 'chapter'))) throw new BookError('invalid-material')
   const { recoveryRequired: _, ...book } = view, next = parseBook(json(book), book.bookId), items = []

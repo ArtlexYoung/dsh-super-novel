@@ -4,7 +4,7 @@ import { Button, Input, IconSearchOutline16, IconChevronDownOutline14, IconChevr
 import { materialKinds } from './materials.js'
 
 /** Filters affect navigation only; the selected draft remains mounted. */
-export function DocumentDirectory({ book, chapterId, documents, busy, search, setSearch, kind, setKind, linked, setLinked, page, setPage, select, switchDocuments, clear, children, t }) {
+export function DocumentDirectory({ book, chapterId, documents, busy, search, setSearch, kind, setKind, linked, setLinked, page, setPage, select, switchDocuments, outline, clear, children, t }) {
   const chapters = book.chapters.filter(item => !item.kind || item.kind === 'chapter')
   const materials = book.chapters.filter(item => materialKinds.includes(item.kind) && !['archived', 'trashed'].includes(item.status))
   const visible = documents === 'chapters' ? chapters : materials
@@ -32,10 +32,14 @@ export function DocumentDirectory({ book, chapterId, documents, busy, search, se
         </Select>
       </div>}
       <div className="sn-directory-status"><span role="status">{filtered.length} {t(documents === 'chapters' ? 'chapters' : 'materialsView')}{hasFilter ? ` / ${visible.length}` : ''}</span>{hasFilter && <Button size="sm" onClick={clear}>{t('clearFilters')}</Button>}</div>
+      {documents === 'chapters' && <Button className="sn-outline-directory-link" size="sm" disabled={busy} onClick={outline}>{t('bookOutline')}</Button>}
       {filteredOut && <p className="sn-notice">{t('selectedOutsideFilter')}</p>}
       <nav className="sn-chapters" aria-label={t(documents === 'chapters' ? 'chapter' : 'materialsView')}>
         {!filtered.length && <p>{t(visible.length ? 'noMatchingDocuments' : documents === 'chapters' ? 'noChapters' : 'noMaterials')}</p>}
-        {filtered.slice(currentPage * 100, currentPage * 100 + 100).map((item, index) => <Button size="sm" key={item.chapterId} disabled={busy} aria-current={chapterId === item.chapterId ? 'true' : undefined} onClick={() => select(item.chapterId)}><span className="sn-number">{String(currentPage * 100 + index + 1).padStart(2, '0')}</span><span className="sn-document-label"><span>{item.title}{item.kind && item.kind !== 'chapter' && <small className="sn-kind-label"> · {t(item.kind)}</small>}</span>{item.linkedChapterId && <small className="sn-document-link">{t('relatedChapter')}: {chapters.find(chapter => chapter.chapterId === item.linkedChapterId)?.title ?? t('missingLinkedChapter')}</small>}</span></Button>)}
+        {filtered.slice(currentPage * 100, currentPage * 100 + 100).map((item, index) => <React.Fragment key={item.chapterId}>
+          {documents === 'chapters' && book.schemaVersion === 3 && (!index || filtered[currentPage * 100 + index - 1]?.structure.volumeId !== item.structure.volumeId) && <h4 className="sn-directory-group">{book.volumes.find(group => group.volumeId === item.structure.volumeId)?.title ?? t('unassignedVolume')}</h4>}
+          <Button size="sm" disabled={busy} aria-current={chapterId === item.chapterId ? 'true' : undefined} onClick={() => select(item.chapterId)}><span className="sn-number">{String(currentPage * 100 + index + 1).padStart(2, '0')}</span><span className="sn-document-label"><span>{item.title}{item.kind && item.kind !== 'chapter' && <small className="sn-kind-label"> · {t(item.kind)}</small>}</span>{item.linkedChapterId && <small className="sn-document-link">{t('relatedChapter')}: {chapters.find(chapter => chapter.chapterId === item.linkedChapterId)?.title ?? t('missingLinkedChapter')}</small>}{documents === 'chapters' && item.structure && <small className="sn-document-link">{t('progress-' + item.structure.progress)}</small>}</span></Button>
+        </React.Fragment>)}
       </nav>
       {filtered.length > 100 && <div className="sn-pagination"><Button size="sm" aria-label={t('previousPage')} disabled={!currentPage} onClick={() => setPage(currentPage - 1)}><IconChevronLeftOutline14 /></Button><span>{currentPage + 1} / {lastPage + 1}</span><Button size="sm" aria-label={t('nextPage')} disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}><IconChevronRightOutline14 /></Button></div>}
       {children}

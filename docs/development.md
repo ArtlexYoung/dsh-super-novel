@@ -98,3 +98,5 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 资料维护使用 `scripts/browser-material-maintenance.ts` 检查无关更新保留输入、元信息冲突、清除浏览器表单缓存后的资料/事件/伏笔恢复、正式保存与清理失败的区别、旧清理保留新输入、常用筛选、三种批量操作与过期预览拒绝。实际包检查 300/420px 和 900px 全屏，预览时确认按钮保持可见，维护不调用模型。`test/material-maintenance.test.ts` 覆盖独立分支、格式与预算、备份回读、100 份批量、1,000 份筛选、三个提交阶段的中断和重复请求；真实 Host 测试另外校验只读与跨库限制。
 
 集中待确认使用 `scripts/browser-candidate-inbox.ts` 检查指定候选导航、跨章草稿保留、审阅返回、方向编辑、部分状态确认与拒绝剩余、过期阻断、资料来源、整理范围预览、停止及轮询保留焦点。独立流程包含两次作者显式启动的固定响应调用，查询和重开不新增调用；检查 300/420px 与 900px 布局。`test/candidate-inbox.test.ts` 覆盖只读与跨库、拒绝后的旧表单、分页与扫描预算、损坏、取消、幂等和备份回读。
+
+整书提纲使用 `scripts/browser-book-outline.ts` 检查核验备份后启用、卷与故事线、键盘重排、过期预览、影响列表、撤回、正文和结构表单从磁盘恢复、另一窗口 prepared 阶段保留输入，以及 300/420px、900px 全屏。`test/book-structure.test.ts` 覆盖严格格式、迁移与结构保存各阶段中断、幂等、跨库和只读、正文不变、引用与前章顺序、辅助记录变化、预算、取消、1,000 章分页和格式 3 的资料维护入口。旧插件必须拒绝格式 3，不使用降级写入作为恢复办法。

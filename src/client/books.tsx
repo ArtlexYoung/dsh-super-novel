@@ -15,6 +15,7 @@ import { StoryStatePanel } from './story-state.js'
 import { ChapterIntent } from './chapter-intent.js'
 import { MaterialLibrary } from './material-library.js'
 import { CandidateInboxPanel } from './candidate-inbox.js'
+import { BookOutlinePanel } from './book-outline.js'
 import { Backups } from './backups.js'
 import { StorageSettings } from './storage-location.js'
 import { DraftRecovery } from './draft-recovery.js'
@@ -90,6 +91,7 @@ export function Books({ api, sessionId, t, setup }) {
   const [linkedChapter, setLinkedChapter] = useState('all')
   const [preferredProposal, setPreferredProposal] = useState('')
   const [preferredInbox, setPreferredInbox] = useState(null)
+  const [structureAction, setStructureAction] = useState(null)
   useEffect(() => setPreferredInbox(null), [library?.workspaceId, bookId])
   const [workTab, setWorkTab] = useState(() => { try { const tab = localStorage.getItem('super-novel.workTab'); return ['writing', 'references', 'assessment', 'revisions'].includes(tab) ? tab : 'writing' } catch { return 'writing' } }), [search, setSearch] = useState(''), [directoryPage, setDirectoryPage] = useState(0)
   useEffect(() => { try { localStorage.setItem('super-novel.workTab', workTab) } catch {} }, [workTab])
@@ -107,7 +109,7 @@ export function Books({ api, sessionId, t, setup }) {
   const planning = currentChapter?.kind && currentChapter.kind !== 'chapter'
   const activeTab = planning && !['writing', 'revisions'].includes(workTab) ? 'writing' : workTab
   const managementOpen = pane === 'management'
-  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'inbox', 'selection-material', 'selection-ai', 'intent', 'story-state', 'search', 'reader'].includes(pane) || compact && pane === 'directory'
+  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'inbox', 'outline', 'selection-material', 'selection-ai', 'intent', 'story-state', 'search', 'reader'].includes(pane) || compact && pane === 'directory'
   const capturePosition = () => {
     if (overlayOpen || activeTab !== 'writing') return
     const current = entryRef.current, element = editor.current
@@ -376,6 +378,7 @@ export function Books({ api, sessionId, t, setup }) {
   }
 
   const move = direction => {
+    if (book.schemaVersion === 3 && !planning) { setStructureAction({ id: crypto.randomUUID(), chapterId, direction }); openPane('outline'); return }
     const index = book.chapters.findIndex(item => item.chapterId === chapterId)
     const beforeChapterId = direction < 0 ? book.chapters[index - 1].chapterId : book.chapters[index + 2]?.chapterId ?? ''
     change('move', { beforeChapterId })
@@ -456,7 +459,7 @@ export function Books({ api, sessionId, t, setup }) {
     </>}
     <StorageSettings api={api} sessionId={sessionId} revision={refresh} writable={!busy} t={t} beforeSwitch={async () => { capturePosition(); positions.current.flush(); await flushDraft() }} switching={setReadingDisk} switched={() => { setEntry(null); setLibrary(null); setBookId(''); setChapterId(''); setRefresh(value => value + 1) }} />
     {library && <Backups key={`backup:${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} writable={library.writable && !busy} t={t} beforeBackup={flushDraft} restored={() => setRefresh(value => value + 1)} />}
-    {book && <div className="sn-row sn-recovery-actions"><Button size="sm" onClick={manageMaterials}>{t('materialLibrary')}</Button><Button size="sm" onClick={() => openPane('inbox')}>{t('candidateInbox')}</Button></div>}
+    {book && <div className="sn-row sn-recovery-actions"><Button size="sm" onClick={manageMaterials}>{t('materialLibrary')}</Button><Button size="sm" onClick={() => openPane('inbox')}>{t('candidateInbox')}</Button><Button size="sm" onClick={() => { setStructureAction(null); openPane('outline') }}>{t('bookOutline')}</Button></div>}
     {currentChapter && !planning && <div className="sn-more-tools"><Button size="sm" onClick={() => openPane('story-state')}>{t('storyState')}</Button><Button size="sm" onClick={() => openPane('intent')}>{t('chapterIntent')}</Button><Button size="sm" id="sn-tab-references" onClick={() => showTool('references')}>{t('tab-references')}</Button><Button size="sm" id="sn-tab-assessment" onClick={() => showTool('assessment')}>{t('tab-assessment')}</Button></div>}
     {currentChapter && <section className="sn-document-management"><h3>{currentChapter.title}</h3>
           <details className="sn-document-options" open={documentOptionsOpen} onToggle={event => setDocumentOptionsOpen(event.currentTarget.open)}><summary>{t('documentOptions')}</summary><div className="sn-row sn-recovery-actions"><Button size="sm" disabled={!entry || busy || readingDisk} onClick={readDisk}>{t('reloadDisk')}</Button><Button size="sm" disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</Button>
@@ -479,7 +482,7 @@ export function Books({ api, sessionId, t, setup }) {
     {book?.recoveryRequired && !entry && <div className="sn-empty-state" inert={overlayOpen} aria-hidden={overlayOpen ? 'true' : undefined}><h3>{t('recover')}</h3><p>{t('recovery-required')}</p><Button size="sm" onClick={() => openPane('management')}>{t('openRecovery')}</Button></div>}
     {book && (!book.recoveryRequired || entry) && <div className="sn-book-workspace">
       <WorkspacePanel id="sn-panel-directory" title={t('documentDirectory')} open={!compact || pane === 'directory'} inline={!compact} inactive={!compact && overlayOpen} close={closePane} t={t}>
-      <DocumentDirectory book={book} chapterId={chapterId} documents={documents} busy={busy} search={search} setSearch={setSearch} kind={materialKind} setKind={setMaterialKind} linked={linkedChapter} setLinked={setLinkedChapter} page={directoryPage} setPage={setDirectoryPage} clear={clearFilters} t={t} select={id => editReference(id)} switchDocuments={value => { capturePosition(); setDocuments(value) }}>
+      <DocumentDirectory book={book} chapterId={chapterId} documents={documents} busy={busy} search={search} setSearch={setSearch} kind={materialKind} setKind={setMaterialKind} linked={linkedChapter} setLinked={setLinkedChapter} page={directoryPage} setPage={setDirectoryPage} clear={clearFilters} t={t} select={id => editReference(id)} outline={() => { setStructureAction(null); openPane('outline') }} switchDocuments={value => { capturePosition(); setDocuments(value) }}>
         {documents === 'chapters' && <form className="sn-row" onSubmit={event => { event.preventDefault(); const key = `chapter:${bookId}:${book.revision}:${chapterTitle.trim()}`; if (!requestIds.current.has(key)) requestIds.current.set(key, crypto.randomUUID()); change('create', { chapterId: requestIds.current.get(key), title: chapterTitle }) }}>
           <Input className="sn-input" aria-label={t('chapterTitle')} placeholder={t('chapterTitle')} value={chapterTitle} maxLength={200} disabled={!writable} onChange={event => setChapterTitle(event.target.value)} />
           <IconButton label={t('createChapter')} icon={IconPlusOutline16} type="submit" disabled={!writable || !chapterTitle.trim()} />
@@ -505,7 +508,7 @@ export function Books({ api, sessionId, t, setup }) {
           </div>
           {notice && notice !== 'saved' && <p className="sn-notice" role="status">{t(notice)}</p>}
           {entry && <><textarea className="sn-editor" hidden={!editing} data-book-id={bookId} data-chapter-id={chapterId} ref={editor} aria-label={t(planning ? 'materialText' : 'body')} placeholder={t('documentPlaceholder')} spellCheck={false} value={entry.content} readOnly={!editorWritable} onKeyDown={undoEditor} onBeforeInput={event => { beforeInput.current = { start: event.target.selectionStart, end: event.target.selectionEnd, direction: event.target.selectionDirection } }} onCompositionStart={() => { composition.current = crypto.randomUUID(); historyFor(entryRef.current).breakGroup(); writerFor(library.workspaceId, bookId, chapterId).composing = true }} onCompositionEnd={() => { const writer = writerFor(library.workspaceId, bookId, chapterId); writer.composing = false; writer.attempt(); composition.current = '' }} onScroll={capturePosition} onBlur={capturePosition} onSelect={event => { setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd }); capturePosition() }} onChange={event => { const current = entryRef.current; historyFor(current).record(event.target.value, beforeInput.current ?? { ...selection, direction: 'none' }, { start: event.target.selectionStart, end: event.target.selectionEnd, direction: event.target.selectionDirection }, event.nativeEvent.inputType ?? 'insertText', composition.current); trimHistories(current.identity); beforeInput.current = null; storeDraft({ ...current, content: event.target.value, operationId: crypto.randomUUID() }); capturePosition() }} /><pre className="sn-preview" hidden={editing} aria-label={t(planning ? 'materialText' : 'body')}>{entry.content}</pre></>}
-          {entry && selection.end > selection.start && <Button size="sm" disabled={!writable || dirty || book.schemaVersion !== 2} title={t('selectionMaterialHint')} onClick={() => {
+          {entry && selection.end > selection.start && <Button size="sm" disabled={!writable || dirty || book.schemaVersion < 2} title={t('selectionMaterialHint')} onClick={() => {
             setSelectionMaterial({ start: selection.start, end: selection.end, sourceChapterId: chapterId, sourceHash: entry.diskHash, title: entry.content.slice(selection.start, Math.min(selection.end, selection.start + 20)), kind: 'seed', operationId: crypto.randomUUID(), chapterId: crypto.randomUUID(), quote: entry.content.slice(selection.start, selection.end), expectedRevision: book.revision })
             openPane('selection-material')
           }}>{t('selectionToMaterial')}</Button>}
@@ -546,6 +549,7 @@ export function Books({ api, sessionId, t, setup }) {
     {book && <WorkspacePanel id="sn-panel-create-material" title={t('newMaterialWithAI')} open={pane === 'create-material'} close={closePane} t={t}><MaterialCreator key={`${library.workspaceId}:${bookId}`} active={pane === 'create-material'} api={api} sessionId={sessionId} book={book} workspaceId={library.workspaceId} writable={writable} t={t} onBusy={setBusy} created={materialCreated} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-materials" title={t('referenceList')} open={pane === 'materials'} close={closePane} t={t}><ReferencePanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} open={pane === 'materials'} writable={writable} workspaceId={library.workspaceId} t={t} edit={editReference} navigate={openReader} manage={manageMaterials} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-inbox" title={t('candidateInbox')} open={pane === 'inbox'} close={closePane} t={t}><CandidateInboxPanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} open={pane === 'inbox'} revisionHint={refresh} t={t} review={reviewInboxItem} organize={() => openPane('create-material')} /></WorkspacePanel>}
+    {book && <WorkspacePanel id="sn-panel-outline" title={t('bookOutline')} open={pane === 'outline'} close={closePane} t={t}><BookOutlinePanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={chapterId} branchId={branch.current} open={pane === 'outline'} preferredAction={structureAction} writable={libraryWritable} t={t} changed={applyBook} beforeChange={flushDraft} writeChapter={editReference} scene={id => openReader({ chapterId: id, proposalId: '' })} intent={id => action(async () => { await flushDraft(); capturePosition(); setChapterId(id); setDocuments('chapters'); setWorkTab('writing'); setPane('intent') })} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-search" title={t('searchBook')} open={pane === 'search'} close={closePane} t={t}><BookSearchPanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} open={pane === 'search'} dirty={dirty} t={t} preview={openReader} /></WorkspacePanel>}
     {book && reader && <WorkspacePanel id="sn-panel-reader" title={t('documentPreview')} open={pane === 'reader'} close={closePane} t={t}><DocumentReader key={reader.id} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} target={reader.target} open={pane === 'reader'} writable={writable} t={t} back={() => setPane(reader.origin || 'materials')} edit={editReference} /></WorkspacePanel>}
     </div>

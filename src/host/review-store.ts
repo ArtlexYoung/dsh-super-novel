@@ -13,6 +13,7 @@ import type { TextGenerator } from './chapter-generator.js'
 const recordSchema = z.strictObject({ schemaVersion: z.literal(1), checkerVersion: z.literal(1), workspaceId: z.string(), request: reviewRequestSchema,
   text: contentSchema, context: contentSchema, result: reviewViewSchema })
 type Record = z.infer<typeof recordSchema>
+export { recordSchema as reviewRecordSchema }
 function assessmentState(dimensions: ReviewView['dimensions'], count: number): ReviewView['state'] {
   return dimensions.some(item => item.state === 'unknown') ? 'unknown' : dimensions.some(item => item.state === 'degraded') ? 'degraded' : count ? 'issues' : 'passed'
 }

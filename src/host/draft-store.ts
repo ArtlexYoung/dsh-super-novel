@@ -20,7 +20,7 @@ function versionOf(query: DraftVersionQuery): DraftVersionQuery { return { works
 
 /** Immutable, fsynced checkpoints. Different editor branches never overwrite each other. */
 export class DraftStore {
-  private constructor(private readonly files: BookFiles, private readonly workspaceId: string, private readonly books: BookStore, private readonly hooks: DraftHooks, private readonly kind: 'prose' | 'material' | 'story') {}
+  private constructor(private readonly files: BookFiles, private readonly workspaceId: string, private readonly books: BookStore, private readonly hooks: DraftHooks, private readonly kind: 'prose' | 'material' | 'story' | 'structure') {}
   static async at(root: string, workspaceId: string, books: BookStore, hooks: DraftHooks = {}): Promise<DraftStore> { return new DraftStore(await BookFiles.at(root), workspaceId, books, hooks, 'prose') }
   static async formsAt(root: string, workspaceId: string, books: BookStore, kind: string, hooks: DraftHooks = {}): Promise<DraftStore> {
     return new DraftStore(await BookFiles.at(root), workspaceId, books, hooks, formKindSchema.parse(kind))
@@ -32,6 +32,10 @@ export class DraftStore {
   private async check(query: DraftQuery): Promise<void> {
     if (query.workspaceId !== this.workspaceId) throw new BookError('location-changed')
     const book = await this.books.readBook(query.bookId)
+    if (this.kind === 'structure') {
+      if (query.chapterId !== book.bookId || book.schemaVersion !== 3) throw new BookError('invalid-structure')
+      return
+    }
     const item = book.chapters.find(item => item.chapterId === query.chapterId)
     if (!item) throw new BookError('chapter-not-found')
     if (this.kind === 'material' && !materialKind(item.kind) || this.kind === 'story' && item.kind && item.kind !== 'chapter') throw new BookError('invalid-material')
