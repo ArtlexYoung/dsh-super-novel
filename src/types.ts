@@ -462,6 +462,21 @@ export interface RestoreBackupRequest extends BackupQuery { readonly manifestHas
 
 export interface BackupHealth { readonly state: 'none' | 'verified' | 'failed'; readonly attemptedAt: number; readonly reason: string }
 
+export interface SaveDetailsRequest extends DraftQuery { readonly branchId: string; readonly operationId: string }
+export interface SaveDetails {
+  readonly formal: { readonly state: 'saved' | 'external' | 'recovery-required' | 'unavailable'; readonly revision: number; readonly hash: string; readonly reason: string }
+  readonly draft: { readonly state: 'confirmed' | 'not-recorded' | 'unavailable'; readonly reason: string; readonly unreadable: number; readonly current?: DraftSummary; readonly latest?: DraftSummary }
+  readonly backup: { readonly state: 'verified' | 'none' | 'unavailable'; readonly reason: string; readonly summary?: BackupSummary; readonly attempt: BackupHealth }
+}
+export interface MilestoneRequest extends BackupQuery { readonly expectedRevision: number; readonly label: string }
+export interface MilestoneSummary { readonly bookId: string; readonly backupId: string; readonly label: string; readonly title: string; readonly revision: number; readonly createdAt: number; readonly manifestHash: string }
+export interface MilestoneListing { readonly items: readonly MilestoneSummary[]; readonly unreadable: number; readonly complete: boolean }
+export interface RestoredCopyRequest extends RestoreBackupRequest { readonly root: string }
+export interface RestoredCopyPreview {
+  readonly root: string; readonly bookId: string; readonly title: string; readonly revision: number; readonly chapterCount: number; readonly materialCount: number
+  readonly ready: boolean; readonly documents: readonly { readonly chapterId: string; readonly title: string; readonly kind: string; readonly excerpt: string }[]
+}
+
 export interface UpgradeBookRequest { readonly workspaceId: string; readonly bookId: string; readonly expectedRevision: number; readonly operationId: string; readonly backupId: string }
 export interface MaterialMetadataRequest {
   readonly workspaceId: string; readonly bookId: string; readonly expectedRevision: number; readonly operationId: string; readonly chapterId: string

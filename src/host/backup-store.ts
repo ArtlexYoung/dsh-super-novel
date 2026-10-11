@@ -1,9 +1,9 @@
 import { readdir, mkdir, rename, rm, open, lstat } from 'node:fs/promises'
 import { createHash, randomUUID } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { z } from 'zod'
 import { BookError, hash, idSchema, json, parseBook } from '../domain/books.js'
-import type { BackupSettings, BackupSummary, BackupPreview, BackupHealth } from '../types.js'
+import type { BackupSettings, BackupSummary, BackupPreview, BackupHealth, RestoredCopyPreview, RestoredCopyRequest } from '../types.js'
 import { BookFiles } from './book-files.js'
 import { BookStore } from './book-store.js'
 import { StorageLocations, inside } from './storage-location.js'
@@ -11,11 +11,13 @@ import { syncDirectory } from './file-publication.js'
 import { MAX_FILES, MAX_TOTAL, packArchive, unpackArchive } from './backup-archive.js'
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
+const summarySchema = z.strictObject({ backupId: idSchema, bookId: idSchema, title: z.string().max(200), revision: z.int().positive(), createdAt: z.int().nonnegative(), verifiedAt: z.int().nonnegative(), bytes: z.int().nonnegative(), fileCount: z.int().nonnegative(), recoveryRequired: z.boolean(), path: z.string().max(8192) })
 const manifestSchema = z.strictObject({ format: z.literal('super-novel-backup'), version: z.literal(1), backupId: idSchema,
   bookId: idSchema, sourceWorkspaceId: digest, title: z.string().max(200), createdAt: z.int().nonnegative(), revision: z.int().positive(),
   recoveryRequired: z.boolean(), files: z.array(z.strictObject({ path: z.string().max(255), bytes: z.int().nonnegative(), hash: digest })).min(1).max(MAX_FILES) })
 const configSchema = z.strictObject({ version: z.literal(1), root: z.string().max(4096), automatic: z.boolean() })
 const CONFIG = '.super-novel/backup.json'
+const restoredSchema = z.strictObject({ version: z.literal(2), backupId: idSchema, bookId: idSchema, sourceWorkspaceId: digest, manifestHash: digest, restoredAt: z.int().nonnegative(), boundRecords: z.literal('source-only') })
 const sections = new Set(['chapters', 'drafts', 'form-drafts', 'transactions', 'proposals', 'fact-proposals', 'reviews', 'conflicts', 'recoveries', 'migrations', 'intents', 'intent-proposals', 'story-state', 'story-proposals'])
 const sha = (data: Buffer) => createHash('sha256').update(data).digest('hex')
 
@@ -66,17 +68,22 @@ export class BackupStore {
   }
 
   async list(bookId: string): Promise<BackupSummary[]> {
+    return (await this.listStatus(bookId)).items
+  }
+
+  async listStatus(bookId: string): Promise<{ items: BackupSummary[]; unreadable: number; complete: boolean }> {
     const files = await this.destination(), folder = `.super-novel-backups/${idSchema.parse(bookId)}`
     let names: string[]
-    try { names = await readdir(await files.path(folder)) } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error }
-    const result: BackupSummary[] = []
-    for (const name of names.filter(name => /^[a-f0-9-]{36}\.summary\.json$/.test(name)).sort().reverse().slice(0, 100)) {
+    try { names = await readdir(await files.path(folder)) } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { items: [], unreadable: 0, complete: true }; throw error }
+    const result: BackupSummary[] = [], candidates = [...new Set(names.filter(name => /^[a-f0-9-]{36}\.(?:summary\.json|tar\.gz)$/.test(name)).map(name => name.slice(0, 36)))]; let unreadable = 0
+    for (const backupId of candidates.sort().reverse().slice(0, 100)) {
       try {
-        const file = await files.read(`${folder}/${name}`), value = JSON.parse(file.text) as BackupSummary
-        if (value.bookId === bookId && idSchema.safeParse(value.backupId).success && (await lstat(await files.path(this.name(bookId, value.backupId)))).isFile()) result.push(value)
-      } catch { /* An unfinished/invalid sidecar is never shown as verified. */ }
+        const file = await files.read(`${folder}/${backupId}.summary.json`), value = summarySchema.parse(JSON.parse(file.text)), path = await files.path(this.name(bookId, backupId))
+        if (value.bookId !== bookId || value.backupId !== backupId || value.path !== path || !(await lstat(path)).isFile()) throw new BookError('invalid-backup')
+        result.push(value)
+      } catch { unreadable++ }
     }
-    return result.sort((a, b) => b.createdAt - a.createdAt)
+    return { items: result.sort((a, b) => b.createdAt - a.createdAt), unreadable, complete: !unreadable && candidates.length <= 100 }
   }
 
   async health(bookId: string): Promise<BackupHealth> {
@@ -107,7 +114,12 @@ export class BackupStore {
     const target = await this.destination(), folder = `.super-novel-backups/${bookId}`, name = this.name(bookId, backupId)
     await target.directory(folder)
     return await target.lock(`${folder}/.${backupId}.lock`, async () => {
-      try { await lstat(await target.path(name)); return (await this.inspect(bookId, backupId, signal)).summary }
+      try {
+        await lstat(await target.path(name))
+        const summary = (await this.inspect(bookId, backupId, signal)).summary, sidecar = `${folder}/${backupId}.summary.json`, before = await target.read(sidecar)
+        if (!before.exists) await target.replace(sidecar, json(summary), before)
+        return summary
+      }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
       const staging = `${folder}/.stage-${backupId}`, temporary = `${name}.tmp-${randomUUID()}`
       await target.directory(staging, true)
@@ -166,7 +178,7 @@ export class BackupStore {
     })
   }
 
-  private async validate(path: string, signal: AbortSignal, output?: BookFiles): Promise<BackupPreview> {
+  private async validate(path: string, signal: AbortSignal, output?: BookFiles, compare?: BookFiles): Promise<BackupPreview> {
     let manifest: z.infer<typeof manifestSchema> | undefined, count = 0, total = 0
     const seen = new Set<string>()
     for await (const entry of unpackArchive(path, signal)) {
@@ -183,6 +195,10 @@ export class BackupStore {
       const text = new TextDecoder('utf8', { fatal: true, ignoreBOM: true }).decode(entry.data)
       if (text.includes('\0')) throw new BookError('invalid-text')
       if (entry.path === `novels/${manifest.bookId}/project.json`) parseBook(text, manifest.bookId)
+      if (compare) {
+        const copy = await compare.read(entry.path, 32 * 1024 * 1024)
+        if (!copy.exists || hash(copy.text) !== expected.hash) throw new BookError('restored-copy-changed')
+      }
       if (output) { await output.directory(dirname(entry.path)); await output.replace(entry.path, text, { exists: false, text: '' }) }
     }
     if (!manifest || count !== manifest.files.length || !seen.has(`novels/${manifest.bookId}/project.json`)) throw new BookError('invalid-backup')
@@ -209,12 +225,50 @@ export class BackupStore {
     try {
       const output = await BookFiles.at(await this.files.path(staging))
       await output.directory('novels')
-      await this.validate(preview.summary.path, signal, output)
+      const copied = await this.validate(preview.summary.path, signal, output)
+      if (copied.manifestHash !== expectedManifestHash) throw new BookError('revision-conflict')
       await output.directory('.super-novel')
-      await output.replace('.super-novel/restored-from.json', json({ version: 1, backupId, sourceWorkspaceId: preview.sourceWorkspaceId, restoredAt: Date.now(), boundRecords: 'source-only' }), { exists: false, text: '' })
+      await output.replace('.super-novel/restored-from.json', json({ version: 2, backupId, bookId, sourceWorkspaceId: preview.sourceWorkspaceId, manifestHash: preview.manifestHash, restoredAt: Date.now(), boundRecords: 'source-only' }), { exists: false, text: '' })
       signal.throwIfAborted()
       await rename(await this.files.path(staging), await this.files.path(root)); await syncDirectory(await this.files.path(parent))
       return { root: await this.files.path(root), bookId }
     } finally { await rm(await this.files.path(staging), { recursive: true, force: true }) }
+  }
+
+  async previewRestored(input: RestoredCopyRequest, signal: AbortSignal): Promise<RestoredCopyPreview> {
+    const request = z.strictObject({ workspaceId: digest, bookId: idSchema, backupId: idSchema, manifestHash: digest, root: z.string().min(1).max(4096) }).parse(input)
+    if (request.workspaceId !== hash(this.files.root)) throw new BookError('location-changed')
+    if (dirname(request.root) !== join(this.files.root, '.super-novel/restored') || !idSchema.safeParse(basename(request.root)).success) throw new BookError('unsafe-path')
+    signal.throwIfAborted()
+    await this.files.path(`.super-novel/restored/${basename(request.root)}`)
+    const copy = await BookFiles.at(request.root)
+    if (copy.root !== request.root) throw new BookError('unsafe-path')
+    const source = restoredSchema.parse(JSON.parse((await copy.read('.super-novel/restored-from.json')).text))
+    if (source.bookId !== request.bookId || source.backupId !== request.backupId || source.manifestHash !== request.manifestHash) throw new BookError('invalid-backup')
+    const backup = await this.inspect(request.bookId, request.backupId, signal)
+    if (backup.manifestHash !== request.manifestHash || backup.sourceWorkspaceId !== source.sourceWorkspaceId) throw new BookError('revision-conflict')
+    const verified = await this.validate(backup.summary.path, signal, undefined, copy)
+    if (verified.manifestHash !== request.manifestHash) throw new BookError('revision-conflict')
+    const expected = new Set([...backup.files, '.super-novel/restored-from.json']); let count = 0
+    const walk = async (folder: string): Promise<void> => {
+      for (const entry of await readdir(folder ? await copy.path(folder) : copy.root, { withFileTypes: true })) {
+        signal.throwIfAborted()
+        if (++count > MAX_FILES * 2) throw new BookError('too-large')
+        const name = folder ? `${folder}/${entry.name}` : entry.name
+        await copy.path(name)
+        if (entry.isDirectory()) await walk(name)
+        else if (!entry.isFile() || !expected.delete(name)) throw new BookError('restored-copy-changed')
+      }
+    }
+    await walk('')
+    if (expected.size) throw new BookError('restored-copy-changed')
+    const books = await BookStore.at(copy.root), book = await books.readBook(request.bookId), documents: RestoredCopyPreview['documents'][number][] = []
+    for (const item of book.chapters.slice(0, 5)) {
+      const content = await copy.read(`novels/${book.bookId}/chapters/${item.chapterId}.md`, 32 * 1024 * 1024)
+      documents.push({ chapterId: item.chapterId, title: item.title, kind: item.kind ?? 'chapter', excerpt: content.text.slice(0, 1000) })
+    }
+    signal.throwIfAborted()
+    return { root: copy.root, bookId: book.bookId, title: book.title, revision: book.revision, chapterCount: book.chapters.filter(item => !item.kind || item.kind === 'chapter').length, materialCount: book.chapters.filter(item => item.kind && item.kind !== 'chapter').length,
+      ready: !backup.summary.recoveryRequired && !book.recoveryRequired, documents }
   }
 }

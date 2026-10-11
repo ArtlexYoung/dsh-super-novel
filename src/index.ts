@@ -21,6 +21,9 @@ import type { BookSearchRequest, BookSearchResult, DocumentPreviewRequest, Docum
 import type { UpgradeBookRequest, MaterialMetadataRequest, MaterialSearchRequest, MaterialSearchResult, MaterialReferences, SelectionMaterialRequest } from './types.js'
 import type { MaterialBatchRequest, MaterialBatchPreview, FormDraftQuery, FormDraftRequest, FormDraftVersionQuery, SettleFormDraftRequest } from './types.js'
 import { BackupStore } from './host/backup-store.js'
+import { MilestoneStore } from './host/milestone-store.js'
+import { saveDetails } from './host/save-details.js'
+import type { SaveDetails, SaveDetailsRequest, MilestoneRequest, MilestoneSummary, MilestoneListing, RestoredCopyRequest, RestoredCopyPreview } from './types.js'
 import type { BackupSettings, BackupSummary, BackupPreview, BackupHealth, BackupQuery, BackupConfiguration, RestoreBackupRequest } from './types.js'
 import { randomUUID } from 'node:crypto'
 import { DraftStore } from './host/draft-store.js'
@@ -200,6 +203,50 @@ export class SuperNovel extends TypertRemoteService {
     const scope = await workspaceBooks(this.ctx, sessionId, writing, signal)
     if (scope.workspaceId !== workspaceId) throw new BookError('location-changed')
     return scope
+  }
+
+  @Remote
+  async saveDetails(sessionId: string, request: SaveDetailsRequest, signal: AbortSignal): Promise<SaveDetails> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, false, signal)
+      return await saveDetails(scope.root, scope.store, request, signal)
+    })
+  }
+
+  @Remote
+  async createMilestone(sessionId: string, request: MilestoneRequest, signal: AbortSignal): Promise<MilestoneSummary> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      const settings = await (await BackupStore.at(scope.root)).settings()
+      await (await StorageLocations.at(scope.defaultRoot)).validate(settings.root, scope.mode)
+      return await (await MilestoneStore.at(scope.root, scope.store)).create(request, signal)
+    })
+  }
+
+  @Remote
+  async bookMilestones(sessionId: string, workspaceId: string, bookId: string, signal: AbortSignal): Promise<MilestoneListing> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, workspaceId, false, signal)
+      return await (await MilestoneStore.at(scope.root, scope.store)).list(bookId, signal)
+    })
+  }
+
+  @Remote
+  async previewRestoredCopy(sessionId: string, request: RestoredCopyRequest, signal: AbortSignal): Promise<RestoredCopyPreview> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, false, signal)
+      return await (await BackupStore.at(scope.root)).previewRestored(request, signal)
+    })
+  }
+
+  @Remote
+  async switchToRestoredCopy(sessionId: string, request: RestoredCopyRequest, signal: AbortSignal): Promise<StorageLocation> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      const copy = await (await BackupStore.at(scope.root)).previewRestored(request, signal)
+      if (!copy.ready) throw new BookError('recovery-required')
+      return await this.changeStorageLocation(sessionId, { root: copy.root, expectedWorkspaceId: scope.workspaceId }, signal)
+    })
   }
 
   @Remote

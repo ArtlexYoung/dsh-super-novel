@@ -17,6 +17,9 @@ import { MaterialLibrary } from './material-library.js'
 import { CandidateInboxPanel } from './candidate-inbox.js'
 import { BookOutlinePanel } from './book-outline.js'
 import { Backups } from './backups.js'
+import { SaveDetailsPanel } from './save-details.js'
+import { DraftBarrier, assertDraftReceipts } from './draft-barrier.js'
+import { DraftBarrierContext } from './draft-context.js'
 import { StorageSettings } from './storage-location.js'
 import { DraftRecovery } from './draft-recovery.js'
 import { draftKey, editorBranch, readCachedDrafts, writeCachedDraft, forgetCachedDraft } from './draft-cache.js'
@@ -68,6 +71,7 @@ export function Books({ api, sessionId, t, setup }) {
   const branch = useRef('')
   if (!branch.current) branch.current = editorBranch()
   const writers = useRef(new Map())
+  const formWriters = useRef(new DraftBarrier()), [backupAction, setBackupAction] = useState({ version: 0 })
   const [draftState, setDraftState] = useState({ kind: 'formal', savedAt: 0 })
   const documentIdentity = `${library?.workspaceId ?? ''}:${bookId}:${chapterId}`
   // Hide the previous document in the same render as a selection change.
@@ -109,7 +113,7 @@ export function Books({ api, sessionId, t, setup }) {
   const planning = currentChapter?.kind && currentChapter.kind !== 'chapter'
   const activeTab = planning && !['writing', 'revisions'].includes(workTab) ? 'writing' : workTab
   const managementOpen = pane === 'management'
-  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'inbox', 'outline', 'selection-material', 'selection-ai', 'intent', 'story-state', 'search', 'reader'].includes(pane) || compact && pane === 'directory'
+  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'inbox', 'outline', 'save-details', 'selection-material', 'selection-ai', 'intent', 'story-state', 'search', 'reader'].includes(pane) || compact && pane === 'directory'
   const capturePosition = () => {
     if (overlayOpen || activeTab !== 'writing') return
     const current = entryRef.current, element = editor.current
@@ -180,7 +184,10 @@ export function Books({ api, sessionId, t, setup }) {
   }
   const flushDraft = async () => {
     for (const writer of writers.current.values()) await writer.flush()
+    await formWriters.current.flush()
+    assertDraftReceipts(writers.current.values())
   }
+  const storageSwitched = (targetBookId = '') => { setEntry(null); setLibrary(null); setBookId(targetBookId); setChapterId(''); setRefresh(value => value + 1) }
   const characterCount = useMemo(() => (entry?.content ?? '').replace(/\s/gu, '').replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '_').length, [entry?.content])
   useEffect(() => setDocumentOptionsOpen(false), [bookId, chapterId])
   useEffect(() => { if (stale && (entry?.externallyModified || entry?.baseHash !== entry?.diskHash)) setDocumentOptionsOpen(true) }, [stale, entry?.externallyModified, entry?.baseHash, entry?.diskHash])
@@ -424,7 +431,7 @@ export function Books({ api, sessionId, t, setup }) {
     if (!generated || proposalId) { setPane(''); setWorkTab(generated ? 'revisions' : 'writing') }
   }
 
-  return <section ref={root} className="sn-books" data-compact={compact} aria-label={t('intro')} onKeyDown={event => {
+  return <DraftBarrierContext.Provider value={formWriters.current}><section ref={root} className="sn-books" data-compact={compact} aria-label={t('intro')} onKeyDown={event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') { event.preventDefault(); save() }
   }}>
     <header className="sn-project-heading"><Button size="sm" className="sn-project-title" aria-label={t('bookManager')} aria-expanded={managementOpen} disabled={busy} onClick={() => openPane('management')}><span>{book?.title ?? t('title')}</span><IconChevronDownOutline14 /></Button>{book && !book.recoveryRequired && <IconButton label={t('searchBook')} icon={IconSearchOutline16} disabled={busy} onClick={() => openPane('search')} />}{entry && (overlayOpen || activeTab !== 'writing') && <span className="sn-project-save" role="status" title={dirty ? t(`draft-${draftState.kind}`) : t('saved')}>{dirty ? t(`draft-${draftState.kind}`) : t('saved')}</span>}{library && !library.writable && <Tag tone="neutral">{t('readOnlyShort')}</Tag>}</header>
@@ -457,8 +464,8 @@ export function Books({ api, sessionId, t, setup }) {
       {book?.recoveryRequired && <Button size="sm" disabled={busy || !library.writable} onClick={() => action(async signal => applyBook(unwrap(await api.recoverBook(sessionId, bookId, signal))))}>{t('recover')}</Button>}
       {book?.recoveryRequired && <InterruptedRecovery key={bookId} api={api} sessionId={sessionId} bookId={bookId} writable={library.writable && !busy} t={t} saved={applyBook} />}
     </>}
-    <StorageSettings api={api} sessionId={sessionId} revision={refresh} writable={!busy} t={t} beforeSwitch={async () => { capturePosition(); positions.current.flush(); await flushDraft() }} switching={setReadingDisk} switched={() => { setEntry(null); setLibrary(null); setBookId(''); setChapterId(''); setRefresh(value => value + 1) }} />
-    {library && <Backups key={`backup:${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} writable={library.writable && !busy} t={t} beforeBackup={flushDraft} restored={() => setRefresh(value => value + 1)} />}
+    <StorageSettings api={api} sessionId={sessionId} revision={refresh} writable={!busy} t={t} beforeSwitch={async () => { capturePosition(); positions.current.flush(); await flushDraft() }} switching={setReadingDisk} switched={() => storageSwitched()} />
+    {library && <Backups key={`backup:${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} writable={library.writable && !busy} t={t} beforeBackup={async () => { capturePosition(); positions.current.flush(); await flushDraft() }} restored={() => setRefresh(value => value + 1)} preferredOpen={backupAction} switching={setReadingDisk} switched={storageSwitched} />}
     {book && <div className="sn-row sn-recovery-actions"><Button size="sm" onClick={manageMaterials}>{t('materialLibrary')}</Button><Button size="sm" onClick={() => openPane('inbox')}>{t('candidateInbox')}</Button><Button size="sm" onClick={() => { setStructureAction(null); openPane('outline') }}>{t('bookOutline')}</Button></div>}
     {currentChapter && !planning && <div className="sn-more-tools"><Button size="sm" onClick={() => openPane('story-state')}>{t('storyState')}</Button><Button size="sm" onClick={() => openPane('intent')}>{t('chapterIntent')}</Button><Button size="sm" id="sn-tab-references" onClick={() => showTool('references')}>{t('tab-references')}</Button><Button size="sm" id="sn-tab-assessment" onClick={() => showTool('assessment')}>{t('tab-assessment')}</Button></div>}
     {currentChapter && <section className="sn-document-management"><h3>{currentChapter.title}</h3>
@@ -503,7 +510,7 @@ export function Books({ api, sessionId, t, setup }) {
           <div id="sn-panel-writing" className="sn-writing-panel" style={{ '--sn-writing-font': `${preferences.value.font}px`, '--sn-writing-spacing': preferences.value.spacing, '--sn-writing-width': preferences.value.width === 'wide' ? '100%' : '72ch' }} aria-labelledby="sn-tab-writing" hidden={activeTab !== 'writing'} role="tabpanel">
           <div className="sn-toolbar sn-editor-toolbar">
             <Button size="sm" aria-pressed={!editing} onClick={() => { capturePosition(); setEditing(value => !value) }}>{t(editing ? 'preview' : 'edit')}</Button>
-            <span role="status" data-dirty={dirty ? 'true' : undefined} title={draftState.savedAt ? new Date(draftState.savedAt).toLocaleString() : ''}>{readingDisk ? t('loading') : dirty ? t(`draft-${draftState.kind}`) : entry ? t('saved') : t('loading')}</span>
+            <Button size="sm" className="sn-save-details-trigger" aria-label={t('saveDetails')} title={t('saveDetails')} disabled={!entry || busy} onClick={() => openPane('save-details')}><span role="status" data-dirty={dirty ? 'true' : undefined}>{readingDisk ? t('loading') : dirty ? t(`draft-${draftState.kind}`) : entry ? t('saved') : t('loading')}</span></Button>
             <Button variant={dirty ? 'primary' : 'outline'} size="sm" aria-label={t('save')} title={t('saveShortcut')} disabled={!writable || busy || !entry || !dirty || stale} onClick={save}><IconCheckOutline16 />{t('save')}</Button>
           </div>
           {notice && notice !== 'saved' && <p className="sn-notice" role="status">{t(notice)}</p>}
@@ -550,6 +557,7 @@ export function Books({ api, sessionId, t, setup }) {
     {book && <WorkspacePanel id="sn-panel-materials" title={t('referenceList')} open={pane === 'materials'} close={closePane} t={t}><ReferencePanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} open={pane === 'materials'} writable={writable} workspaceId={library.workspaceId} t={t} edit={editReference} navigate={openReader} manage={manageMaterials} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-inbox" title={t('candidateInbox')} open={pane === 'inbox'} close={closePane} t={t}><CandidateInboxPanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} open={pane === 'inbox'} revisionHint={refresh} t={t} review={reviewInboxItem} organize={() => openPane('create-material')} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-outline" title={t('bookOutline')} open={pane === 'outline'} close={closePane} t={t}><BookOutlinePanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={chapterId} branchId={branch.current} open={pane === 'outline'} preferredAction={structureAction} writable={libraryWritable} t={t} changed={applyBook} beforeChange={flushDraft} writeChapter={editReference} scene={id => openReader({ chapterId: id, proposalId: '' })} intent={id => action(async () => { await flushDraft(); capturePosition(); setChapterId(id); setDocuments('chapters'); setWorkTab('writing'); setPane('intent') })} /></WorkspacePanel>}
+    {book && entry && <WorkspacePanel id="sn-panel-save-details" title={t('saveDetails')} open={pane === 'save-details'} close={closePane} t={t}><SaveDetailsPanel key={`${library.workspaceId}:${bookId}:${chapterId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={chapterId} branchId={branch.current} entry={entry} draftState={draftState} open={pane === 'save-details'} writable={libraryWritable} t={t} beforeChange={flushDraft} recovery={item => { setBackupAction(value => ({ version: value.version + 1, ...(item ? { backupId: item.backupId, bookId: item.bookId, manifestHash: item.manifestHash } : {}) })); openPane('management') }} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-search" title={t('searchBook')} open={pane === 'search'} close={closePane} t={t}><BookSearchPanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} open={pane === 'search'} dirty={dirty} t={t} preview={openReader} /></WorkspacePanel>}
     {book && reader && <WorkspacePanel id="sn-panel-reader" title={t('documentPreview')} open={pane === 'reader'} close={closePane} t={t}><DocumentReader key={reader.id} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} target={reader.target} open={pane === 'reader'} writable={writable} t={t} back={() => setPane(reader.origin || 'materials')} edit={editReference} /></WorkspacePanel>}
     </div>
@@ -565,5 +573,5 @@ export function Books({ api, sessionId, t, setup }) {
         return <Button size="sm" role="tab" key={tab} id={`sn-tab-${tab}`} aria-controls={`sn-panel-${tab}`} aria-selected={selected} tabIndex={selected ? 0 : -1} disabled={busy || tab !== 'management' && (!book || book.recoveryRequired) || tab === 'revisions' && !entry} onClick={() => tab === 'writing' ? showWriting() : tab === 'revisions' ? showTool('revisions') : pane === tab ? closePane() : openPane(tab)}>{t(label)}</Button>
       })}
     </nav>
-  </section>
+  </section></DraftBarrierContext.Provider>
 }

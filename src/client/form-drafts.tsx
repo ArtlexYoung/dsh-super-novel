@@ -1,10 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useContext, useEffect, useRef, useState } from 'react'
 import { Button } from './primitives.js'
 import { DraftWriter } from './draft-writer.js'
 import { FormDraftCache, readFormEnvelope } from './form-cache.js'
 import { unwrap } from './books.js'
+import { DraftBarrierContext } from './draft-context.js'
 
 export function useFormDraft({ api, sessionId, workspaceId, book, chapterId, branchId, kind, baseHash, initial }) {
+  const barrier = useContext(DraftBarrierContext)
   const identity = { workspaceId, bookId: book.bookId, chapterId }, cache = useRef(null), live = useRef(true), source = useRef(null), cleanup = useRef([])
   if (!cache.current) cache.current = new FormDraftCache(kind, identity, () => localStorage)
   const own = useRef(cache.current.read(branchId)), current = useRef(own.current.kind === 'found' ? readFormEnvelope(own.current.value.content, kind).value : initial)
@@ -24,12 +26,12 @@ export function useFormDraft({ api, sessionId, workspaceId, book, chapterId, bra
     live.current = true
     const checkpoint = () => writer.current.attempt(), unload = event => { if (current.current && writer.current.latest && writer.current.state.kind !== 'disk') { event.preventDefault(); event.returnValue = '' } }
     window.addEventListener('pagehide', checkpoint); window.addEventListener('beforeunload', unload)
-    if (writer.current.latest) checkpoint()
+    if (writer.current.latest) { barrier?.register(writer.current); checkpoint() }
     return () => { live.current = false; checkpoint(); window.removeEventListener('pagehide', checkpoint); window.removeEventListener('beforeunload', unload) }
   }, [])
   const update = (next, persist = true) => {
     current.current = next; setValue(next)
-    if (next && persist) writer.current.update({ content: JSON.stringify(next), operationId: crypto.randomUUID(), baseHash, bookRevision: book.revision })
+    if (next && persist) { writer.current.update({ content: JSON.stringify(next), operationId: crypto.randomUUID(), baseHash, bookRevision: book.revision }); barrier?.register(writer.current) }
   }
   const retryRetire = async () => {
     while (cleanup.current.length) {
