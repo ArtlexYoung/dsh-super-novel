@@ -72,6 +72,24 @@ export class StoryStore {
     if ((await this.books.readBook(bookId)).revision !== book.revision) throw new BookError('revision-conflict')
     return { bookId, version: value.version, events: events.sort((a, b) => a.narrativeOrder - b.narrativeOrder || a.evidence.start - b.evidence.start || a.eventId.localeCompare(b.eventId)), foreshadows }
   }
+  /** Inspect only author-selected chapters; never load out-of-scope evidence. */
+  async readRange(bookId: string, chapterIds: readonly string[], signal: AbortSignal): Promise<StoryState> {
+    const book = await this.books.readBook(bookId), value = await this.ledger(bookId), selected = new Set(chapterIds), sources = new Map<string, ChapterText>()
+    if (book.recoveryRequired) throw new BookError('recovery-required')
+    const events: StoryState['events'][number][] = [], foreshadows: StoryState['foreshadows'][number][] = []
+    const prose = book.chapters.filter(item => !item.kind || item.kind === 'chapter')
+    for (const event of value.events) if (selected.has(event.evidence.chapterId)) {
+      signal.throwIfAborted()
+      events.push({ ...event, state: await this.validEvidence(bookId, event.evidence, sources) && event.changes.every(change => book.chapters.some(item => item.chapterId === change.characterId && item.kind === 'character' && availableDocument(item))) ? 'valid' : 'expired', narrativeOrder: prose.findIndex(item => item.chapterId === event.evidence.chapterId) })
+    }
+    for (const item of value.foreshadows) if (item.planted && selected.has(item.planted.chapterId) && (!item.resolved || selected.has(item.resolved.chapterId))) {
+      signal.throwIfAborted()
+      const ordered = !item.resolved || prose.findIndex(chapter => chapter.chapterId === item.resolved!.chapterId) > prose.findIndex(chapter => chapter.chapterId === item.planted!.chapterId) || item.resolved.chapterId === item.planted.chapterId && item.resolved.start >= item.planted.start
+      foreshadows.push({ ...item, state: ordered && await this.validEvidence(bookId, item.planted, sources) && (!item.resolved || await this.validEvidence(bookId, item.resolved, sources)) ? 'valid' : 'expired' })
+    }
+    if ((await this.books.readBook(bookId)).revision !== book.revision) throw new BookError('revision-conflict')
+    return { bookId, version: value.version, events, foreshadows }
+  }
   private validateCharacters(book: BookSnapshot, event: StoryEvent): void {
     if (event.changes.some(change => !book.chapters.some(item => item.chapterId === change.characterId && item.kind === 'character' && availableDocument(item)))) throw new BookError('invalid-material')
   }

@@ -19,6 +19,7 @@ export const generationRequestSchema = z.strictObject({
   hardConstraints: contentSchema.pipe(z.string().max(16_384)).optional(), intentVersion: z.int().nonnegative().optional(),
   precedingChapterIds: z.array(idSchema).max(3).refine(ids => new Set(ids).size === ids.length).optional(),
   useStoryState: z.boolean().optional(),
+  bookReviewId: idSchema.optional(), bookIssueId: idSchema.optional(),
 }).refine(request => (request.materialIds?.length ?? 0) + (request.precedingChapterIds?.length ?? 0) <= 100)
 const materialSchema = z.strictObject({ chapterId: idSchema, title: titleSchema, kind: documentKindSchema,
   revision: z.int().positive(), hash: digest, content: contentSchema })

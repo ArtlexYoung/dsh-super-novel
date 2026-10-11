@@ -23,6 +23,23 @@ export async function apply(ctx) {
       calls.push({ sessionId: options.sessionId, task: input.task, instruction: input.instruction, chapter: input.chapter, selection: input.selection,
         ...(input.documentKind ? { documentKind: input.documentKind } : {}), ...(input.selectedMaterials ? { selectedMaterials: input.selectedMaterials } : {}) })
       await writeFile(callFile, JSON.stringify(calls))
+      if (input.task === 'review-book-range') {
+        if (input.focus.includes('[slow]')) await new Promise((yes, no) => {
+          if (options.signal.aborted) { no(options.signal.reason); return }
+          const timer = setTimeout(yes, 30_000)
+          options.signal.addEventListener('abort', () => { clearTimeout(timer); no(options.signal.reason) }, { once: true })
+        })
+        const before = input.chapters[0], target = input.chapters[1], quote = '林舟用左手举起沉重的铁箱。', start = target.content.indexOf(quote)
+        assert(start >= 0)
+        const evidence = [{ chapterId: before.chapterId, start: 0, end: before.content.indexOf('\n') >= 0 ? before.content.indexOf('\n') : before.content.length, quote: before.content.split('\n')[0] }, { chapterId: target.chapterId, start, end: start + quote.length, quote }]
+        const base = { severity: 'warning', targetChapterId: target.chapterId, evidence, impact: '保持前章伤势，避免凭空恢复。', authorQuestion: '是否有未选中的康复过程？' }
+        yield { type: 'text-delta', index: 0, text: JSON.stringify({ dimensions: ['promise', 'character', 'causality', 'repetition', 'pacing'].map(dimension => ({ dimension, state: 'checked' })), issues: [
+          { ...base, dimension: 'causality', message: '左腕动作与前章伤势矛盾。', suggestion: '改用右手，并让箱子留在地上。' },
+          { ...base, dimension: 'pacing', message: '动作推进需要作者核对。', suggestion: '核对搬箱动作是否影响线索推进。' },
+        ], unknowns: ['范围外的康复过程未验证。'] }) }
+        yield { type: 'usage', usage: { inputTokens: 40, outputTokens: 60, totalTokens: 100 } }
+        yield { type: 'finish', reason: { kind: 'stop' } }; return
+      }
       if (input.task === 'suggest-chapter-state') {
         const quote = input.chapter.slice(0, Math.min(40, input.chapter.length))
         const evidence = { start: 0, end: quote.length, quote }

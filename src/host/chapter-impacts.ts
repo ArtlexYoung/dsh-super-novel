@@ -7,6 +7,7 @@ import { BookStore } from './book-store.js'
 import { ProposalStore } from './proposal-store.js'
 import { ReviewStore } from './review-store.js'
 import { StoryStore } from './story-store.js'
+import { BookReviewStore, parseBookReviewRecord } from './book-review-store.js'
 
 /** Derived dependency report; no mutation, automatic rewrites, or paid calls. */
 export async function chapterImpacts(root: string, workspaceId: string, books: BookStore, bookId: string, chapterId: string, signal: AbortSignal): Promise<ChapterImpacts> {
@@ -52,6 +53,17 @@ export async function chapterImpacts(root: string, workspaceId: string, books: B
       if (value.request.chapterId !== chapterId && !relatedProposals.has(value.request.proposalId) && !value.request.materialIds?.includes(chapterId)) continue
       const review = await reviews.get(bookId, name.slice(0, -5))
       add('review', review.reviewId, review.chapterId, source.book.chapters.find(item => item.chapterId === review.chapterId)?.title ?? review.reviewId, review.state === 'expired')
+    }
+    const bookReviewFolder = `novels/${bookId}/book-reviews`, bookReviews = await BookReviewStore.at(root, workspaceId, books)
+    try { names = await readdir(await files.path(bookReviewFolder)) } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') names = []; else throw error }
+    if (names.length > 100) complete = false
+    for (const name of names.sort().slice(0, 100)) if (name.endsWith('.json') && idSchema.safeParse(name.slice(0, -5)).success) {
+      check()
+      const file = await files.read(`${bookReviewFolder}/${name}`, 4 * 1024 * 1024); account(file.text)
+      const record = parseBookReviewRecord(file.text, workspaceId, bookId, name.slice(0, -5))
+      if (!record.snapshot.chapters.some(item => item.chapterId === chapterId) && !record.snapshot.sources.some(item => item.sourceId === chapterId)) continue
+      const view = await bookReviews.get(bookId, record.request.reviewId, signal)
+      add('book-review', view.reviewId, chapterId, 'Cross-chapter review', view.state === 'expired')
     }
     const story = await (await StoryStore.at(root, workspaceId, books)).read(bookId)
     account(JSON.stringify(story))

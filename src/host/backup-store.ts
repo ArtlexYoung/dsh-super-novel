@@ -18,7 +18,7 @@ const manifestSchema = z.strictObject({ format: z.literal('super-novel-backup'),
 const configSchema = z.strictObject({ version: z.literal(1), root: z.string().max(4096), automatic: z.boolean() })
 const CONFIG = '.super-novel/backup.json'
 const restoredSchema = z.strictObject({ version: z.literal(2), backupId: idSchema, bookId: idSchema, sourceWorkspaceId: digest, manifestHash: digest, restoredAt: z.int().nonnegative(), boundRecords: z.literal('source-only') })
-const sections = new Set(['chapters', 'drafts', 'form-drafts', 'transactions', 'proposals', 'fact-proposals', 'reviews', 'conflicts', 'recoveries', 'migrations', 'intents', 'intent-proposals', 'story-state', 'story-proposals'])
+const sections = new Set(['chapters', 'drafts', 'form-drafts', 'transactions', 'proposals', 'fact-proposals', 'reviews', 'book-reviews', 'conflicts', 'recoveries', 'migrations', 'intents', 'intent-proposals', 'story-state', 'story-proposals'])
 const sha = (data: Buffer) => createHash('sha256').update(data).digest('hex')
 
 function allowed(path: string, bookId: string): boolean {

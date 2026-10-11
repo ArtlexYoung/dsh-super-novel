@@ -38,7 +38,7 @@ export interface BookOutline {
 }
 export interface StructureImpacts {
   readonly complete: boolean; readonly unreadable: number; readonly scanned: number; readonly sourceHash: string
-  readonly items: readonly { readonly kind: 'facts' | 'material' | 'proposal' | 'review' | 'event' | 'foreshadow' | 'intent' | 'fact-suggestion' | 'story-suggestion'; readonly id: string; readonly chapterId: string; readonly title: string }[]
+  readonly items: readonly { readonly kind: 'facts' | 'material' | 'proposal' | 'review' | 'book-review' | 'event' | 'foreshadow' | 'intent' | 'fact-suggestion' | 'story-suggestion'; readonly id: string; readonly chapterId: string; readonly title: string }[]
 }
 export interface BookStructurePreview {
   readonly revision: number; readonly previewHash: string; readonly movedChapterIds: readonly string[]
@@ -143,7 +143,39 @@ export interface GenerateChapterRequest {
   readonly intentVersion?: number
   readonly precedingChapterIds?: readonly string[]
   readonly useStoryState?: boolean
+  readonly bookReviewId?: string
+  readonly bookIssueId?: string
 }
+
+export interface BookReviewScope {
+  readonly workspaceId: string; readonly bookId: string; readonly expectedRevision: number
+  readonly chapterIds: readonly string[]; readonly storylineId: string; readonly focus: string
+}
+export interface BookReviewRequest extends BookReviewScope { readonly reviewId: string; readonly previewHash: string; readonly maxCalls: 1 }
+export interface BookReviewSource { readonly kind: string; readonly sourceId: string; readonly title: string; readonly state: 'included' | 'missing' | 'expired' | 'unavailable'; readonly content: string }
+export interface BookReviewPreview {
+  readonly previewHash: string; readonly bytes: number; readonly maxBytes: number; readonly maxCalls: 1; readonly ready: boolean; readonly complete: boolean
+  readonly chapters: readonly { readonly chapterId: string; readonly title: string; readonly revision: number; readonly hash: string }[]
+  readonly sources: readonly BookReviewSource[]; readonly totalChapters: number; readonly contiguous: boolean
+}
+export type BookReviewDimension = 'promise' | 'character' | 'causality' | 'repetition' | 'pacing'
+export interface BookReviewIssue {
+  readonly issueId: string; readonly dimension: BookReviewDimension; readonly severity: 'warning' | 'error'; readonly message: string
+  readonly suggestion: string; readonly impact: string; readonly authorQuestion: string; readonly targetChapterId: string
+  readonly evidence: readonly StoryEvidence[]; readonly decision: 'unconfirmed' | 'confirmed' | 'dismissed'
+}
+export interface BookReviewView {
+  readonly reviewId: string; readonly bookId: string; readonly resultHash: string; readonly state: 'checked' | 'issues' | 'degraded' | 'unknown' | 'expired'
+  readonly reason: string; readonly chapters: BookReviewPreview['chapters']; readonly totalChapters: number; readonly complete: boolean; readonly contiguous: boolean
+  readonly dimensions: readonly { readonly dimension: BookReviewDimension; readonly state: 'checked' | 'unknown' | 'degraded' }[]
+  readonly issues: readonly BookReviewIssue[]; readonly unknowns: readonly string[]; readonly createdAt: number; readonly elapsedMs: number; readonly usage: GenerationUsage; readonly calls: number
+}
+export interface BookReviewListing { readonly items: readonly BookReviewView[]; readonly complete: boolean; readonly unreadable: number }
+export interface BookReviewDecision {
+  readonly workspaceId: string; readonly bookId: string; readonly reviewId: string; readonly issueId: string
+  readonly resultHash: string; readonly operationId: string; readonly action: 'confirm' | 'dismiss'
+}
+export interface BookIssueRevisionRequest { readonly workspaceId: string; readonly bookId: string; readonly reviewId: string; readonly issueId: string; readonly proposalId: string }
 export interface StoryEvidence {
   readonly chapterId: string; readonly revision: number; readonly hash: string
   readonly start: number; readonly end: number; readonly quote: string
@@ -173,7 +205,7 @@ export interface StoryStateSuggestion {
 export interface StoryContext { readonly content: string; readonly hash: string; readonly state: 'ready' | 'expired' | 'over-budget'; readonly bytes: number }
 export interface ChapterImpacts {
   readonly complete: boolean
-  readonly items: readonly { readonly kind: 'facts' | 'summary' | 'material' | 'proposal' | 'review' | 'event' | 'foreshadow'; readonly id: string; readonly chapterId: string; readonly title: string; readonly state: 'current' | 'expired' }[]
+  readonly items: readonly { readonly kind: 'facts' | 'summary' | 'material' | 'proposal' | 'review' | 'book-review' | 'event' | 'foreshadow'; readonly id: string; readonly chapterId: string; readonly title: string; readonly state: 'current' | 'expired' }[]
 }
 export interface SceneIntent {
   readonly goal: string; readonly obstacle: string; readonly choice: string; readonly cost: string

@@ -8,6 +8,7 @@ import { BookFiles } from './book-files.js'
 import { intentRecordSchema, intentSuggestionSchema } from './intent-store.js'
 import { reviewRecordSchema } from './review-store.js'
 import { storyRecordSchema, storySuggestionSchema } from './story-store.js'
+import { parseBookReviewRecord } from './book-review-store.js'
 
 export const STRUCTURE_LIMITS = { names: 10_000, scans: 500, bytes: 32 * 1024 * 1024, items: 1000 } as const
 
@@ -59,6 +60,10 @@ export async function structureImpacts(files: BookFiles, workspaceId: string, bo
         if (value.workspaceId !== workspaceId || value.request.bookId !== book.bookId || value.request.reviewId !== name.slice(0, -5)) throw new BookError('invalid-format')
         // Reviews can carry a preceding-fact context even if their own position stays fixed.
         add('review', value.request.reviewId, value.request.chapterId, title(value.request.chapterId))
+      })
+      for (const name of await names(`${folder}/book-reviews`)) if (name.endsWith('.json') && idSchema.safeParse(name.slice(0, -5)).success) await attempt(async () => {
+        const value = parseBookReviewRecord(await read(`${folder}/book-reviews/${name}`), workspaceId, book.bookId, name.slice(0, -5))
+        if (value.snapshot.chapters.some(item => affected.has(item.chapterId))) add('book-review', value.request.reviewId, value.snapshot.chapters[0]!.chapterId, 'Cross-chapter review')
       })
       for (const name of await names(`${folder}/fact-proposals`)) if (name.endsWith('.json') && idSchema.safeParse(name.slice(0, -5)).success) await attempt(async () => {
         const value = parseFactProposal(await read(`${folder}/fact-proposals/${name}`), workspaceId, book.bookId, name.slice(0, -5))

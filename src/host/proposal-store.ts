@@ -14,6 +14,7 @@ import { ReviewStore } from './review-store.js'
 import { VoiceStore } from './voice-store.js'
 import { IntentStore } from './intent-store.js'
 import { StoryStore } from './story-store.js'
+import { BookReviewStore } from './book-review-store.js'
 
 const queues = new Map<string, Promise<void>>()
 
@@ -76,6 +77,14 @@ export class ProposalStore {
     if (['facts', 'voice'].includes(chapter.book.chapters.find(item => item.chapterId === request.chapterId)?.kind ?? '')) throw new BookError('invalid-material')
     if (chapter.book.revision !== request.expectedRevision || chapter.hash !== request.expectedHash || chapter.externallyModified) throw new BookError('revision-conflict')
     let baseline = chapter.content, round = 0
+    if (!!request.bookReviewId !== !!request.bookIssueId) throw new BookError('invalid-request')
+    if (request.bookReviewId) {
+      const reviewed = await (await BookReviewStore.at(this.files.root, this.workspaceId, this.books)).revision(request.bookId, request.bookReviewId, request.bookIssueId!, signal)
+      if (!request.reviewId) {
+        if (json(generationRequestSchema.parse({ ...reviewed.request, proposalId: request.proposalId })) !== json(request)) throw new BookError('invalid-request')
+        round = reviewed.round
+      }
+    }
     if (request.parentProposalId && !request.reviewId || request.reviewId && !request.issueId || request.issueId && !request.reviewId) throw new BookError('invalid-request')
     if (request.reviewId) {
       const reviewed = await (await ReviewStore.at(this.files.root, this.workspaceId, this.books)).revision(request.bookId, request.reviewId, request.issueId!)
@@ -184,6 +193,10 @@ export class ProposalStore {
     if (book.recoveryRequired) return proposalView(proposal, proposal.state === 'generating' && !active ? 'interrupted' : proposal.state, 'recovery-required', true)
     const chapter = await this.books.readChapter(bookId, proposal.request.chapterId)
     if (chapter.book.chapters.find(item => item.chapterId === proposal.request.chapterId)!.revision !== proposal.baselineChapterRevision || chapter.hash !== proposal.request.expectedHash || chapter.externallyModified) return proposalView(proposal, active && proposal.state === 'generating' ? 'generating' : 'expired', 'revision-conflict', false)
+    if (proposal.request.bookReviewId) {
+      const review = await (await BookReviewStore.at(this.files.root, this.workspaceId, this.books)).get(bookId, proposal.request.bookReviewId, new AbortController().signal)
+      if (review.state === 'expired' || !review.issues.some(issue => issue.issueId === proposal.request.bookIssueId && issue.decision === 'confirmed')) return proposalView(proposal, 'expired', 'review-stale', false)
+    }
     if (proposal.intentContext) {
       const intent = await (await IntentStore.at(this.files.root, this.workspaceId, this.books)).read(bookId, proposal.request.chapterId)
       if (intent.version !== proposal.intentContext.version || intent.hash !== proposal.intentContext.hash) return proposalView(proposal, 'expired', 'intent-changed', false)

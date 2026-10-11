@@ -159,7 +159,8 @@ export class ReviewStore {
     return { round, request: { proposalId: randomUUID(), bookId, chapterId: record.request.chapterId, expectedRevision: current.revision,
       expectedHash: parent ? parent.request.expectedHash : record.request.expectedHash, mode: 'rewrite', instruction: `${issue.message}\n${issue.suggestion}`, materials: parent ? parent.request.materials : '',
       ...(parent ? {
-        ...(parent.request.hardConstraints !== undefined ? { hardConstraints: parent.request.hardConstraints } : {}), ...(parent.request.intentVersion !== undefined ? { intentVersion: parent.request.intentVersion } : {}), ...(parent.request.precedingChapterIds ? { precedingChapterIds: parent.request.precedingChapterIds } : {}), ...(parent.request.useStoryState ? { useStoryState: true, knowledgeScope: parent.request.knowledgeScope } : {})
+        ...(parent.request.hardConstraints !== undefined ? { hardConstraints: parent.request.hardConstraints } : {}), ...(parent.request.intentVersion !== undefined ? { intentVersion: parent.request.intentVersion } : {}), ...(parent.request.precedingChapterIds ? { precedingChapterIds: parent.request.precedingChapterIds } : {}), ...(parent.request.useStoryState ? { useStoryState: true, knowledgeScope: parent.request.knowledgeScope } : {}),
+        ...(parent.request.bookReviewId ? { bookReviewId: parent.request.bookReviewId, bookIssueId: parent.request.bookIssueId } : {})
       } : {
         ...(record.request.hardConstraints !== undefined ? { hardConstraints: record.request.hardConstraints } : {}), ...(record.request.intentVersion !== undefined ? { intentVersion: record.request.intentVersion } : {}), ...(record.request.materialIds ? { materialIds: record.request.materialIds } : {})
       }),

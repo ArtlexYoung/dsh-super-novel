@@ -49,6 +49,8 @@ import { FactStore } from './host/fact-store.js'
 import { extractFacts } from './host/fact-extraction.js'
 import type { ReviewRequest, ReviewView } from './types.js'
 import { ReviewStore } from './host/review-store.js'
+import { BookReviewStore } from './host/book-review-store.js'
+import type { BookReviewScope, BookReviewPreview, BookReviewRequest, BookReviewView, BookReviewListing, BookReviewDecision, BookIssueRevisionRequest } from './types.js'
 import { VoiceStore } from './host/voice-store.js'
 import { BookTransfer } from './host/book-transfer.js'
 import type { AuthorizeVoiceRequest, VoiceSample, ImportRequest, ImportPreview, ExportText } from './types.js'
@@ -73,6 +75,8 @@ export class SuperNovel extends TypertRemoteService {
   private readonly lifetime = new AbortController()
   private readonly extractions = new Map<string, Promise<FactProposal>>()
   private readonly reviews = new Map<string, Promise<ReviewView>>()
+  private readonly bookReviewTasks = new Map<string, Promise<BookReviewView>>()
+  private readonly bookReviewStops = new Map<string, { controller: AbortController; done: Promise<BookReviewView> }>()
   private readonly storySuggestions = new Map<string, Promise<StoryStateSuggestion>>()
   private readonly directions = new Map<string, Promise<IntentSuggestion>>()
 
@@ -83,7 +87,7 @@ export class SuperNovel extends TypertRemoteService {
       this.lifetime.abort()
       for (const timer of this.backupTimers.values()) clearTimeout(timer)
       this.backupTimers.clear()
-      await Promise.allSettled([this.tasks.dispose(), ...this.extractions.values(), ...this.reviews.values(), ...this.directions.values(), ...this.storySuggestions.values(), ...this.backupJobs])
+      await Promise.allSettled([this.tasks.dispose(), ...this.extractions.values(), ...this.reviews.values(), ...this.bookReviewTasks.values(), ...this.directions.values(), ...this.storySuggestions.values(), ...this.backupJobs])
     })
   }
 
@@ -869,6 +873,86 @@ export class SuperNovel extends TypertRemoteService {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
       return await (await BookTransfer.at(scope.root, scope.store)).export(bookId, chapterIds)
+    })
+  }
+
+  /** Mechanical checks and isolated model review produce a persistent read-only assessment. */
+  @Remote
+  async previewBookReview(sessionId: string, request: BookReviewScope, signal: AbortSignal): Promise<BookReviewPreview> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, false, signal)
+      return await (await BookReviewStore.at(scope.root, scope.workspaceId, scope.store)).preview(request, signal)
+    })
+  }
+
+  /** One durable request, one model call; a stopped or interrupted request never resends. */
+  @Remote
+  async reviewBookRange(sessionId: string, request: BookReviewRequest, signal: AbortSignal): Promise<BookReviewView> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal), key = `${scope.workspaceId}:${JSON.stringify(request)}`
+      const existing = this.bookReviewTasks.get(key)
+      if (existing) return await existing
+      let generate: ReturnType<typeof hostTextGenerator> | false = false
+      try { generate = hostTextGenerator(this.ctx, scope.session) } catch {}
+      const controller = new AbortController(), stopKey = `${scope.workspaceId}:${request.bookId}:${request.reviewId}`
+      const task = (await BookReviewStore.at(scope.root, scope.workspaceId, scope.store)).run(request, generate, AbortSignal.any([controller.signal, signal, this.lifetime.signal, AbortSignal.timeout(300_000)]))
+      this.bookReviewTasks.set(key, task)
+      if (!this.bookReviewStops.has(stopKey)) this.bookReviewStops.set(stopKey, { controller, done: task })
+      try { return await this.backedUp(scope.root, request.bookId, sessionId, task) } finally {
+        if (this.bookReviewTasks.get(key) === task) this.bookReviewTasks.delete(key)
+        if (this.bookReviewStops.get(stopKey)?.done === task) this.bookReviewStops.delete(stopKey)
+      }
+    })
+  }
+
+  /** Explicit cancellation also works on hosts that do not relay transport aborts. */
+  @Remote
+  async stopBookReview(sessionId: string, workspaceId: string, bookId: string, reviewId: string, signal: AbortSignal): Promise<BookReviewView> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, workspaceId, true, signal)
+      idSchema.parse(bookId); idSchema.parse(reviewId)
+      const running = this.bookReviewStops.get(`${scope.workspaceId}:${bookId}:${reviewId}`)
+      if (running) {
+        running.controller.abort(new BookError('book-review-stopped'))
+        try { await running.done } catch (error) { if (!running.controller.signal.aborted) throw error }
+      }
+      signal.throwIfAborted()
+      return await this.backedUp(scope.root, bookId, sessionId, (await BookReviewStore.at(scope.root, scope.workspaceId, scope.store)).get(bookId, reviewId, signal))
+    })
+  }
+
+  @Remote
+  async bookReviews(sessionId: string, workspaceId: string, bookId: string, signal: AbortSignal): Promise<BookReviewListing> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, workspaceId, false, signal)
+      return await (await BookReviewStore.at(scope.root, scope.workspaceId, scope.store)).list(bookId, signal)
+    })
+  }
+
+  @Remote
+  async bookReview(sessionId: string, workspaceId: string, bookId: string, reviewId: string, signal: AbortSignal): Promise<BookReviewView> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, workspaceId, false, signal)
+      return await (await BookReviewStore.at(scope.root, scope.workspaceId, scope.store)).get(bookId, reviewId, signal)
+    })
+  }
+
+  @Remote
+  async decideBookIssue(sessionId: string, request: BookReviewDecision, signal: AbortSignal): Promise<BookReviewView> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, (await BookReviewStore.at(scope.root, scope.workspaceId, scope.store)).decide(request, signal))
+    })
+  }
+
+  @Remote
+  async reviseBookIssue(sessionId: string, request: BookIssueRevisionRequest, signal: AbortSignal): Promise<ProposalView> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      idSchema.parse(request.proposalId)
+      const revision = await (await BookReviewStore.at(scope.root, scope.workspaceId, scope.store)).revision(request.bookId, request.reviewId, request.issueId, signal)
+      const store = await ProposalStore.at(scope.root, scope.workspaceId, scope.store)
+      return await this.backedUp(scope.root, request.bookId, sessionId, this.tasks.start(store, sessionId, { ...revision.request, proposalId: request.proposalId }, hostChapterGenerator(this.ctx, scope.session), signal))
     })
   }
 
