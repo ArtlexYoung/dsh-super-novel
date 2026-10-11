@@ -1,4 +1,5 @@
 export const zh = {
+  focusWriting: '专注写作', focusShort: '专注', exitFocus: '退出专注', exitFocusHint: '退出专注（Esc）', creationTools: '创作工具', storageAndBackup: '文件与备份', createMaterialShort: '新建',
   brStopExisting: '停止并核对请求',
   'book-review': '跨章审校',
   brStopping: '正在停止并保存记录…',
@@ -466,6 +467,7 @@ export const zh = {
 }
 
 export const en = {
+  focusWriting: 'Focus writing', focusShort: 'Focus', exitFocus: 'Exit focus', exitFocusHint: 'Exit focus (Esc)', creationTools: 'Writing tools', storageAndBackup: 'Files and backups', createMaterialShort: 'New',
   brStopExisting: 'Stop and check request',
   'book-review': 'Cross-chapter review',
   brStopping: 'Stopping and saving the record…',

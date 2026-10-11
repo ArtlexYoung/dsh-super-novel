@@ -75,7 +75,12 @@ export async function checkSaveRecovery(page, output, identity, resize = size =>
   try {
     await outline.locator('.sn-form-draft-status[data-state=failed]').waitFor()
     await page.keyboard.press('Escape'); await showContent(page); await mkdir(bodyLock)
+    await page.getByRole('button', { name: 'Focus writing', exact: true }).click()
     const latestInput = firstInput + '又写了一句。'; await body.fill(latestInput); await page.locator('.sn-draft-alert').waitFor(); const heldNode = await body.elementHandle()
+    assert.equal(await page.locator('.sn-books').getAttribute('data-focused'), 'true')
+    assert(await page.locator('.sn-draft-alert').isVisible(), 'Focus must keep failed draft and recovery actions visible')
+    assert(await page.locator('.sn-draft-alert').getByRole('button', { name: 'Download local draft', exact: true }).isVisible())
+    await page.getByRole('button', { name: 'Exit focus', exact: true }).click()
     await openManagement(page); await expand(backups); await copyPanel.getByRole('button', { name: 'Switch to this copy', exact: true }).click()
     await backups.locator('> p[role=alert]').waitFor(); assert.equal(await storageState(), initialStorage, 'failed draft must not change the selected library')
     assert(await body.evaluate((element, original) => element === original, heldNode)); assert.equal(await body.inputValue(), latestInput)

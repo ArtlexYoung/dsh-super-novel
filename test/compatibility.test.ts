@@ -11,7 +11,7 @@ import { runInNewContext } from 'node:vm'
 
 test('client icons use public exports in old and new DSH without replacing its controls', async () => {
   const result = await build({ entryPoints: ['src/client/primitives.ts'], bundle: true, write: false, format: 'cjs', platform: 'node', external: ['react', '@deepseek-ai/dsh-client-ui-primitives'] })
-  const names = ['Plus', 'Edit', 'Refresh', 'Check', 'Close', 'Search', 'ChevronUp', 'ChevronDown', 'ChevronLeft', 'ChevronRight']
+  const names = ['Plus', 'Edit', 'Refresh', 'Check', 'Close', 'Search', 'ChevronUp', 'ChevronDown', 'ChevronLeft', 'ChevronRight', 'Fullscreen', 'ListPen', 'FolderOpen', 'Ellipsis']
   for (const modern of [false, true]) {
     const primitives = { Button: () => {}, Input: () => {}, Tag: () => {} }
     for (const name of names) {
@@ -23,7 +23,7 @@ test('client icons use public exports in old and new DSH without replacing its c
     runInNewContext(result.outputFiles[0].text, { module, exports: module.exports, require: name => name === 'react' ? { createElement: (type, props) => ({ type, props }) } : primitives })
     for (const name of ['Button', 'Input', 'Tag']) assert.equal(module.exports[name], primitives[name])
     const icons = Object.entries(module.exports).filter(([name]) => name.startsWith('Icon'))
-    assert.equal(icons.length, 11)
+    assert.equal(icons.length, names.length + 1)
     for (const [name, component] of icons) {
       const rendered = component({ className: 'host-icon' })
       assert.equal(typeof rendered.type, 'function')
