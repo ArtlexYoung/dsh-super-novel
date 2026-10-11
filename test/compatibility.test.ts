@@ -49,6 +49,12 @@ test('Host and browser codecs preserve strict validation across both RPC contrac
   assert.throws(() => save.create().parse({ bookId: 'incomplete request' }))
   const status = host.find(item => item.method === 'status').result
   assert.deepEqual(status.create().parse({ state: 'enabled', reason: 'ready' }), { state: 'enabled', reason: 'ready' })
+  for (const descriptors of [host, remote]) {
+    for (const method of ['previewMaterialBatch', 'updateMaterialBatch', 'checkpointFormDraft', 'formDrafts', 'formDraft', 'dismissFormDraft']) {
+      const codec = descriptors.find(item => item.method === method).parameters[1].codec
+      assert.throws(() => codec.create().parse({ workspaceId: '0'.repeat(64) }), `${method} must reject missing identity and fields`)
+    }
+  }
 })
 
 test('preset registry owns one scoped definition, leaves the default intact and releases it on unload', async t => {

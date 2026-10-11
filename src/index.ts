@@ -17,6 +17,7 @@ import { MaterialCatalog } from './host/material-catalog.js'
 import { BookSearch } from './host/book-search.js'
 import type { BookSearchRequest, BookSearchResult, DocumentPreviewRequest, DocumentPreview } from './types.js'
 import type { UpgradeBookRequest, MaterialMetadataRequest, MaterialSearchRequest, MaterialSearchResult, MaterialReferences, SelectionMaterialRequest } from './types.js'
+import type { MaterialBatchRequest, MaterialBatchPreview, FormDraftQuery, FormDraftRequest, FormDraftVersionQuery, SettleFormDraftRequest } from './types.js'
 import { BackupStore } from './host/backup-store.js'
 import type { BackupSettings, BackupSummary, BackupPreview, BackupHealth, BackupQuery, BackupConfiguration, RestoreBackupRequest } from './types.js'
 import { randomUUID } from 'node:crypto'
@@ -305,6 +306,58 @@ export class SuperNovel extends TypertRemoteService {
     return await storageResult(async () => {
       const scope = await workspaceBooks(this.ctx, sessionId, false, signal)
       return await (await MaterialCatalog.at(scope.root, scope.store)).search(request, signal)
+    })
+  }
+
+  @Remote
+  async previewMaterialBatch(sessionId: string, request: MaterialBatchRequest, signal: AbortSignal): Promise<MaterialBatchPreview> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, false, signal)
+      return await (await MaterialCatalog.at(scope.root, scope.store)).previewBatch(request, signal)
+    })
+  }
+
+  @Remote
+  async updateMaterialBatch(sessionId: string, request: MaterialBatchRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      return await this.backedUp(scope.root, request.bookId, sessionId, scope.store.batchMetadata(request, signal))
+    })
+  }
+
+  @Remote
+  async checkpointFormDraft(sessionId: string, input: FormDraftRequest, signal: AbortSignal): Promise<DraftSummary> {
+    return await storageResult(async () => {
+      const { kind, ...request } = input, scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      const result = await (await DraftStore.formsAt(scope.root, scope.workspaceId, scope.store, kind)).put(request, signal)
+      this.scheduleBackup(scope.root, request.bookId, sessionId)
+      return result
+    })
+  }
+
+  @Remote
+  async formDrafts(sessionId: string, input: FormDraftQuery, signal: AbortSignal): Promise<DraftListing> {
+    return await storageResult(async () => {
+      const { kind, ...query } = input, scope = await this.backupScope(sessionId, query.workspaceId, false, signal)
+      signal.throwIfAborted()
+      return await (await DraftStore.formsAt(scope.root, scope.workspaceId, scope.store, kind)).list(query)
+    })
+  }
+
+  @Remote
+  async formDraft(sessionId: string, input: FormDraftVersionQuery, signal: AbortSignal): Promise<DiskDraft> {
+    return await storageResult(async () => {
+      const { kind, ...query } = input, scope = await this.backupScope(sessionId, query.workspaceId, false, signal)
+      signal.throwIfAborted()
+      return await (await DraftStore.formsAt(scope.root, scope.workspaceId, scope.store, kind)).read(query)
+    })
+  }
+
+  @Remote
+  async dismissFormDraft(sessionId: string, input: SettleFormDraftRequest, signal: AbortSignal): Promise<DraftSummary> {
+    return await storageResult(async () => {
+      const { kind, ...request } = input, scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      return await (await DraftStore.formsAt(scope.root, scope.workspaceId, scope.store, kind)).settle(request, signal)
     })
   }
 

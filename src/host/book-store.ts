@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { BookError, contentSchema, documentKindSchema, hash, idSchema, json, parseBook, snapshot, titleSchema, transactionSchema, transactionSourceSchema, availableDocument, materialKind, sourceEvidenceSchema } from '../domain/books.js'
 import type { Book, Transaction } from '../domain/books.js'
-import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, InterruptedChapterSave, SettleInterruptedSaveRequest, MaterialMetadataRequest } from '../types.js'
+import type { BookSnapshot, ChapterMutationRequest, ChapterText, CreateBookRequest, InterruptedChapterSave, SettleInterruptedSaveRequest, MaterialMetadataRequest, MaterialBatchRequest } from '../types.js'
+import { materialBatchSchema, prepareMaterialBatch } from '../domain/material-batch.js'
 import { BookFiles } from './book-files.js'
 import { parseFactDocument, validateFacts } from '../domain/facts.js'
 
@@ -265,6 +266,17 @@ export class BookStore {
         linkedChapterIds: request.linkedChapterIds, relatedMaterialIds: request.relatedMaterialIds })
       delete item.linkedChapterId
       next.revision++; parseBook(json(next), next.bookId)
+      return await this.commit({ schemaVersion: 1, operationId: request.operationId, bookId: next.bookId, requestHash, state: 'prepared', before: file.text, after: next, changes: [] }, signal)
+    })
+  }
+
+  async batchMetadata(input: MaterialBatchRequest, signal: AbortSignal): Promise<BookSnapshot> {
+    const request = materialBatchSchema.parse(input)
+    return await this.files.lock(join(this.folder(request.bookId), '.write.lock'), async () => {
+      const requestHash = hash(json(request))
+      if ((await this.receipt(request.bookId, request.operationId)).length) return await this.replay(request.bookId, request.operationId, requestHash)
+      const file = await this.files.read(this.manifest(request.bookId)), view = await this.readBook(request.bookId)
+      const { next } = prepareMaterialBatch(view, request)
       return await this.commit({ schemaVersion: 1, operationId: request.operationId, bookId: next.bookId, requestHash, state: 'prepared', before: file.text, after: next, changes: [] }, signal)
     })
   }

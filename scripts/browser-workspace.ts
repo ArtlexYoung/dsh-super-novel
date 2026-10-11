@@ -47,7 +47,9 @@ export async function openManagement(page) {
 
 export async function selectBook(page, option) {
   await openManagement(page)
-  await page.getByLabel('Book', { exact: true }).selectOption(option)
+  const [bookId] = await page.getByLabel('Book', { exact: true }).selectOption(option)
+  // The select changes before draft flushing and document loading finish.
+  await page.waitForFunction(id => document.querySelector('.sn-editor')?.dataset.bookId === id, bookId)
   await showContent(page)
 }
 

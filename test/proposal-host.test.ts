@@ -101,4 +101,28 @@ test('real Cordis service dispatches candidate remotes with optional model servi
   scheduled.shift()(); await Promise.all([...ctx.superNovel.backupJobs])
   assert.equal((await backups.list(book.bookId)).length, 2)
   assert.equal(scheduled.length, 0, 'queries do not schedule backups')
+  const materialId = randomUUID()
+  let materials = await ctx.superNovel.changeChapter(sessionId, { operationId: randomUUID(), bookId: book.bookId, chapterId: materialId,
+    expectedRevision: current.book.revision + 1, action: 'create', title: '待整理', kind: 'seed', beforeChapterId: '', content: '资料原文', expectedHash: '' }, signal)
+  materials = await ctx.superNovel.upgradeBook(sessionId, { workspaceId: library.workspaceId, bookId: book.bookId, expectedRevision: materials.revision, operationId: randomUUID(), backupId: randomUUID() }, signal)
+  const batch = { workspaceId: library.workspaceId, bookId: book.bookId, chapterIds: [materialId], expectedRevision: materials.revision, operationId: randomUUID(), action: 'add-tags', tags: ['线索'], linkedChapterId: '' }
+  const form = { tags: '', aliases: '', favorite: false, status: 'active', linkedChapterIds: [], relatedMaterialIds: [] }
+  const draftRequest = { kind: 'material', workspaceId: library.workspaceId, bookId: book.bookId, chapterId: materialId, branchId: randomUUID(), sequence: 1, bookRevision: materials.revision,
+    operationId: randomUUID(), baseHash: materials.chapters.find(item => item.chapterId === materialId).hash, content: JSON.stringify({ schemaVersion: 1, kind: 'material', base: form, form: { ...form, tags: '尚未确认' } }) }
+  const formQuery = { kind: 'material', workspaceId: library.workspaceId, bookId: book.bookId, chapterId: materialId }
+  setSandboxMode(session, 'read-only')
+  const previewBatch = await ctx.superNovel.previewMaterialBatch(sessionId, batch, signal); assert.equal(previewBatch.items.length, 1)
+  assert.equal((await ctx.superNovel.formDrafts(sessionId, formQuery, signal)).drafts.length, 0)
+  for (const [method, input] of [['updateMaterialBatch', batch], ['checkpointFormDraft', draftRequest]]) {
+    await assert.rejects(ctx.superNovel[method](sessionId, input, signal), error => error.details.reason === 'read-only')
+  }
+  await assert.rejects(ctx.superNovel.previewMaterialBatch(sessionId, { ...batch, workspaceId: '0'.repeat(64) }, signal), error => error.details.reason === 'location-changed')
+  setSandboxMode(session, 'workspace-write')
+  const receipt = await ctx.superNovel.checkpointFormDraft(sessionId, draftRequest, signal)
+  const draftVersion = { ...formQuery, branchId: draftRequest.branchId, sequence: 1 }
+  assert.equal((await ctx.superNovel.formDraft(sessionId, draftVersion, signal)).content, draftRequest.content)
+  await ctx.superNovel.updateMaterialBatch(sessionId, batch, signal)
+  await ctx.superNovel.dismissFormDraft(sessionId, { ...draftVersion, contentHash: receipt.contentHash, action: 'dismissed' }, signal)
+  assert.equal((await ctx.superNovel.formDrafts(sessionId, formQuery, signal)).drafts.length, 0)
+  assert.equal(calls, callsBeforeReading, 'maintenance remotes never invoke a model')
 })

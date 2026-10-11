@@ -424,7 +424,18 @@ export interface MaterialMetadataRequest {
 export interface MaterialSearchRequest {
   readonly bookId: string; readonly query: string; readonly kind: string; readonly tag: string; readonly status: string
   readonly linkedChapterId: string; readonly favorite: boolean; readonly offset: number
+  readonly attention?: 'all' | 'untagged' | 'unlinked' | 'stale'
 }
+export interface FormDraftQuery extends DraftQuery { readonly kind: 'material' | 'story' }
+export interface FormDraftRequest extends DraftRequest { readonly kind: 'material' | 'story' }
+export interface FormDraftVersionQuery extends DraftVersionQuery { readonly kind: 'material' | 'story' }
+export interface SettleFormDraftRequest extends SettleDraftRequest { readonly kind: 'material' | 'story'; readonly action: 'dismissed' }
+export interface MaterialBatchRequest {
+  readonly workspaceId: string; readonly bookId: string; readonly expectedRevision: number; readonly operationId: string
+  readonly chapterIds: readonly string[]; readonly action: 'add-tags' | 'link-chapter' | 'archive'; readonly tags: readonly string[]; readonly linkedChapterId: string
+}
+export interface MaterialBatchItem { readonly before: ChapterSummary; readonly after: ChapterSummary; readonly uses: number; readonly backlinks: number; readonly draftBranches: number }
+export interface MaterialBatchPreview { readonly revision: number; readonly items: readonly MaterialBatchItem[]; readonly complete: boolean }
 export interface MaterialSearchResult { readonly items: readonly ChapterSummary[]; readonly total: number; readonly complete: boolean; readonly externalIds: readonly string[]; readonly revision: number }
 export interface BookSearchRequest {
   readonly workspaceId: string; readonly bookId: string; readonly query: string; readonly kind: string

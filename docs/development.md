@@ -94,3 +94,5 @@ node --experimental-strip-types scripts/serve-preview.ts .test-output/preview-v0
 跨章状态用 `scripts/browser-story-state.ts` 验证手工事件、可编辑建议、明确确认、两章伏笔、纯读上下文与修改影响。`test/story-state.test.ts` 包含五章序列、人物知情隔离、来源变化、前章重排、采纳中断重放和损坏格式。`test/proposal-host.test.ts` 用真实 Host 的备份任务核对 AI 与事实采纳后的归档，定时等待在测试中提前触发。
 
 整书查找使用 `scripts/browser-navigation.ts` 检查已保存正文/资料、命中片段、双向引用、前进返回、正文撤销/重做、保存后刷新位置、精确打开原文、草稿失败阻止切章、过期证据和 300/420px、900px 全屏，核对查询零模型调用。`test/book-search.test.ts` 覆盖字面匹配、中文/Unicode 位置、分页、范围隔离、取消和读取预算；`test/writing-position.test.ts` 覆盖位置与存储失败；`test/editor-history.test.ts` 覆盖输入分组、组字、范围替换、重做与内存边界。
+
+资料维护使用 `scripts/browser-material-maintenance.ts` 检查无关更新保留输入、元信息冲突、清除浏览器表单缓存后的资料/事件/伏笔恢复、正式保存与清理失败的区别、旧清理保留新输入、常用筛选、三种批量操作与过期预览拒绝。实际包检查 300/420px 和 900px 全屏，预览时确认按钮保持可见，维护不调用模型。`test/material-maintenance.test.ts` 覆盖独立分支、格式与预算、备份回读、100 份批量、1,000 份筛选、三个提交阶段的中断和重复请求；真实 Host 测试另外校验只读与跨库限制。

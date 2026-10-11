@@ -1,7 +1,8 @@
 import { readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
-import { BookError, contentSchema, hash, idSchema, json } from '../domain/books.js'
+import { BookError, contentSchema, hash, idSchema, json, materialKind } from '../domain/books.js'
+import { formKindSchema, parseFormDraft } from '../domain/form-drafts.js'
 import type { DiskDraft, DraftListing, DraftQuery, DraftRequest, DraftSummary, DraftVersionQuery, SettleDraftRequest } from '../types.js'
 import { BookFiles } from './book-files.js'
 import type { BookStore } from './book-store.js'
@@ -19,16 +20,21 @@ function versionOf(query: DraftVersionQuery): DraftVersionQuery { return { works
 
 /** Immutable, fsynced checkpoints. Different editor branches never overwrite each other. */
 export class DraftStore {
-  private constructor(private readonly files: BookFiles, private readonly workspaceId: string, private readonly books: BookStore, private readonly hooks: DraftHooks) {}
-  static async at(root: string, workspaceId: string, books: BookStore, hooks: DraftHooks = {}): Promise<DraftStore> { return new DraftStore(await BookFiles.at(root), workspaceId, books, hooks) }
-  private folder(query: DraftQuery): string { return join('novels', query.bookId, 'drafts', query.chapterId) }
+  private constructor(private readonly files: BookFiles, private readonly workspaceId: string, private readonly books: BookStore, private readonly hooks: DraftHooks, private readonly kind: 'prose' | 'material' | 'story') {}
+  static async at(root: string, workspaceId: string, books: BookStore, hooks: DraftHooks = {}): Promise<DraftStore> { return new DraftStore(await BookFiles.at(root), workspaceId, books, hooks, 'prose') }
+  static async formsAt(root: string, workspaceId: string, books: BookStore, kind: string, hooks: DraftHooks = {}): Promise<DraftStore> {
+    return new DraftStore(await BookFiles.at(root), workspaceId, books, hooks, formKindSchema.parse(kind))
+  }
+  private folder(query: DraftQuery): string { return this.kind === 'prose' ? join('novels', query.bookId, 'drafts', query.chapterId) : join('novels', query.bookId, 'form-drafts', this.kind, query.chapterId) }
   private branch(query: DraftVersionQuery): string { return join(this.folder(query), query.branchId) }
   private checkpoint(query: DraftVersionQuery): string { return join(this.branch(query), `${String(query.sequence).padStart(16, '0')}.json`) }
 
   private async check(query: DraftQuery): Promise<void> {
     if (query.workspaceId !== this.workspaceId) throw new BookError('location-changed')
     const book = await this.books.readBook(query.bookId)
-    if (!book.chapters.some(item => item.chapterId === query.chapterId)) throw new BookError('chapter-not-found')
+    const item = book.chapters.find(item => item.chapterId === query.chapterId)
+    if (!item) throw new BookError('chapter-not-found')
+    if (this.kind === 'material' && !materialKind(item.kind) || this.kind === 'story' && item.kind && item.kind !== 'chapter') throw new BookError('invalid-material')
   }
 
   private async names(folder: string): Promise<string[]> {
@@ -48,6 +54,7 @@ export class DraftStore {
     let record
     try { record = recordSchema.parse(JSON.parse(file.text)) } catch { throw new BookError('invalid-format') }
     if (record.workspaceId !== query.workspaceId || record.bookId !== query.bookId || record.chapterId !== query.chapterId || record.branchId !== query.branchId || record.sequence !== query.sequence || hash(record.content) !== record.contentHash) throw new BookError('invalid-format')
+    if (this.kind !== 'prose') parseFormDraft(record.content, this.kind)
     const { schemaVersion: _, ...draft } = record
     return draft
   }
@@ -87,6 +94,7 @@ export class DraftStore {
 
   async put(input: DraftRequest, signal: AbortSignal): Promise<DraftSummary> {
     const request = requestSchema.parse(input)
+    if (this.kind !== 'prose') parseFormDraft(request.content, this.kind)
     await this.check(request)
     signal.throwIfAborted()
     await this.files.directory(this.branch(request))
@@ -113,6 +121,7 @@ export class DraftStore {
 
   async settle(input: SettleDraftRequest, signal: AbortSignal): Promise<DraftSummary> {
     const request = settledSchema.parse(input)
+    if (this.kind !== 'prose' && request.action !== 'dismissed') throw new BookError('invalid-format')
     await this.check(request)
     return await this.files.lock(join(this.branch(request), '.write.lock'), async () => {
       const draft = await this.read(versionOf(request))
