@@ -7,8 +7,9 @@ import { materialForm } from './form-cache.js'
 import { useFormDraft, FormDraftStatus, FormRecovery } from './form-drafts.js'
 import { unwrap } from './books.js'
 
-export function MaterialDetail({ api, sessionId, workspaceId, book, item, branchId, writable, t, changed, edit, navigate, beforeGenerate, candidate, close }) {
+export function MaterialDetail({ api, sessionId, workspaceId, book, item, branchId, writable, t, changed, edit, navigate, beforeGenerate, candidate, backToInbox, close }) {
   const [detail, setDetail] = useState(null), [references, setReferences] = useState(null), [linkQuery, setLinkQuery] = useState('')
+  const [generation, setGeneration] = useState(null)
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('')
   const operation = useRef({ key: '', id: '' }), pending = useRef(false), live = useRef(true)
   const current = materialForm(item), token = JSON.stringify(current)
@@ -45,6 +46,7 @@ export function MaterialDetail({ api, sessionId, workspaceId, book, item, branch
   const chapters = book.chapters.filter(item => !item.kind || item.kind === 'chapter')
   const preview = value => <div><p>{t('tags')}: {value.tags || t('none')}</p><p>{t('aliases')}: {value.aliases || t('none')}</p><p>{t('status-' + value.status)}{value.favorite ? ` · ${t('favorite')}` : ''}</p><p>{t('linkedChapters')}: {value.linkedChapterIds.map(id => book.chapters.find(item => item.chapterId === id)?.title ?? t('missingLinkedChapter')).join(' / ') || t('none')}</p><p>{t('relatedMaterials')}: {value.relatedMaterialIds.map(id => book.chapters.find(item => item.chapterId === id)?.title ?? t('missingLinkedChapter')).join(' / ') || t('none')}</p></div>
   return <div className="sn-material-detail">
+    {backToInbox && <Button size="sm" disabled={busy} onClick={backToInbox}>{t('inboxBack')}</Button>}
     {error && <p role="alert">{t(error)}{error === 'formCleanupFailed' && <Button size="sm" disabled={busy} onClick={() => run(async () => { try { await draft.retryRetire() } catch { setError('formCleanupFailed') } })}>{t('retryDraft')}</Button>}</p>}{notice && <p role="status">{t(notice)}</p>}
     <Button size="sm" disabled={busy} onClick={() => run(async () => { await draft.flush(); close() })}>{t('referenceList')}</Button><h3>{item.title}</h3>
     {detail ? <pre className="sn-reference-text">{detail.content || t('emptyReference')}</pre> : <p role="status">{t('loading')}</p>}
@@ -52,10 +54,21 @@ export function MaterialDetail({ api, sessionId, workspaceId, book, item, branch
     <div className="sn-row sn-recovery-actions"><Button size="sm" disabled={!writable || busy || ['archived', 'trashed'].includes(item.status)} onClick={() => run(async () => { await draft.flush(); await edit(item.chapterId) })}>{t('editReference')}</Button>
       {detail && <Button size="sm" disabled={!writable || busy || unsaved || ['archived', 'trashed'].includes(item.status) || detail.externallyModified} onClick={() => run(async signal => {
         await draft.flush(); await beforeGenerate()
-        const request = { bookId: book.bookId, chapterId: item.chapterId, expectedRevision: book.revision, expectedHash: detail.hash, mode: 'draft', start: 0, end: detail.content.length, instruction: t('organizeMaterialInstruction'), materials: '', ...(item.relatedMaterialIds?.length ? { materialIds: item.relatedMaterialIds.filter(id => !['archived', 'trashed'].includes(book.chapters.find(item => item.chapterId === id)?.status)) } : {}) }
-        const value = unwrap(await api.generateChapter(sessionId, { ...request, proposalId: id(request) }, signal)); candidate(item.chapterId, value.proposalId)
+        const request = { workspaceId, bookId: book.bookId, chapterId: item.chapterId, expectedRevision: book.revision, expectedHash: detail.hash, mode: 'draft', start: 0, end: detail.content.length, instruction: t('organizeMaterialInstruction'), materials: '', ...([...current.linkedChapterIds, ...current.relatedMaterialIds].length ? { materialIds: [...new Set([...current.linkedChapterIds, ...current.relatedMaterialIds])].filter(id => !['archived', 'trashed'].includes(book.chapters.find(item => item.chapterId === id)?.status)) } : {}) }
+        const input = { ...request, proposalId: id(request) }, context = unwrap(await api.generationContext(sessionId, input, signal))
+        if (live.current) setGeneration({ request: input, context, token })
       })}>{t('aiOrganizeCandidate')}</Button>}
     </div>
+    {generation && <section className="sn-material-ai-preview"><h3>{t('materialAIPreview')}</h3><p className="sn-notice">{t('materialAIPreviewHint')}</p>
+      {generation.request.expectedRevision !== book.revision || generation.token !== token ? <p role="alert">{t('materialAIStale')}</p> : null}
+      <p>{generation.context.bytes} / {generation.context.maxBytes} {t('contextBytes')}</p>
+      <details><summary>{t('contextSources')}</summary>{generation.context.sections.map((section, index) => <article key={index}><strong>{section.title}</strong><pre className="sn-inbox-excerpt">{section.content}</pre></article>)}</details>
+      <div className="sn-row sn-recovery-actions"><Button size="sm" variant="primary" disabled={!writable || busy || unsaved || generation.context.state !== 'ready' || generation.request.expectedRevision !== book.revision || generation.token !== token} onClick={() => run(async signal => {
+        await draft.flush(); await beforeGenerate()
+        const value = unwrap(await api.generateChapter(sessionId, generation.request, signal))
+        if (live.current) { setGeneration(null); candidate(item.chapterId, value.proposalId) }
+      })}>{t('materialAIConfirm')}</Button><Button size="sm" disabled={busy} onClick={() => setGeneration(null)}>{t('cancel')}</Button></div>
+    </section>}
     {book.schemaVersion === 2 && <details className="sn-material-organize"><summary>{t('organizeMaterial')}{unsaved ? ` · ${t('unconfirmedForm')}` : ''}</summary>
       <FormDraftStatus draft={draft} t={t} />
       {conflict && unsaved && <div role="alert"><p>{t('formMetadataConflict')}</p><details><summary>{t('currentMaterialDetails')}</summary>{preview(current)}</details><Button size="sm" disabled={busy || !writable} onClick={() => draft.update({ ...draft.value, base: current })}>{t('rebaseFormInput')}</Button></div>}

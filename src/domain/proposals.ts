@@ -6,7 +6,7 @@ import { intentSchema } from './intents.js'
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 export const generationRequestSchema = z.strictObject({
-  proposalId: idSchema, bookId: idSchema, chapterId: idSchema,
+  proposalId: idSchema, bookId: idSchema, chapterId: idSchema, workspaceId: digest.optional(),
   expectedRevision: z.int().positive(), expectedHash: digest,
   mode: z.enum(['draft', 'continue', 'rewrite', 'polish']),
   instruction: contentSchema.pipe(z.string().trim().min(1).max(16_384)),

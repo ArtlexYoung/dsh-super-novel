@@ -27,7 +27,7 @@ export function readFormEnvelope(content: string, kind: string): { kind: 'found'
     if (new TextEncoder().encode(content).length > 1024 * 1024) return { kind: 'absent' }
     const value = JSON.parse(content)
     if (value?.schemaVersion !== 1 || value.kind !== kind) return { kind: 'absent' }
-    if (kind === 'material' ? material(value.base) && material(value.form) : kind === 'story' && Number.isSafeInteger(value.base) && value.base >= 0 && story(value.form)) return { kind: 'found', value }
+    if (kind === 'material' ? material(value.base) && material(value.form) : kind === 'story' && Number.isSafeInteger(value.base) && value.base >= 0 && (!value.sourceProposalId || uuid(value.sourceProposalId)) && story(value.form)) return { kind: 'found', value }
   } catch { /* Invalid cache data is never restored as a form. */ }
   return { kind: 'absent' }
 }

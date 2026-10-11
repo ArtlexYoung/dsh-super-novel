@@ -3,7 +3,7 @@ import { Select } from './controls.js'
 import { Button, Input } from './primitives.js'
 import { unwrap } from './books.js'
 
-export function Facts({ api, sessionId, book, chapterId, entry, selection, writable, dirty, t, revisionHint, adopted, locate }) {
+export function Facts({ api, sessionId, book, chapterId, entry, selection, writable, dirty, t, revisionHint, preferred, backToInbox, adopted, locate }) {
   const [items, setItems] = useState([])
   const [view, setView] = useState(null)
   const [subject, setSubject] = useState('')
@@ -22,10 +22,10 @@ export function Facts({ api, sessionId, book, chapterId, entry, selection, writa
     const controller = new AbortController()
     api.factProposals(sessionId, book.bookId, chapterId, controller.signal).then(unwrap).then(items => {
       if (controller.signal.aborted || pending.current) return
-      setItems(items); setView(previous => items.find(item => item.proposalId === previous?.proposalId) ?? items[0] ?? null)
+      setItems(items); setView(previous => items.find(item => item.proposalId === preferred?.proposalId) ?? items.find(item => item.proposalId === previous?.proposalId) ?? items[0] ?? null)
     }).catch(error => { if (!controller.signal.aborted) setError(error.reason ?? 'storage-failed') })
     return () => controller.abort()
-  }, [api, sessionId, book.bookId, book.revision, chapterId, refresh, revisionHint])
+  }, [api, sessionId, book.bookId, book.revision, chapterId, refresh, revisionHint, preferred?.id])
   const action = async fn => {
     if (pending.current) return
     const controller = new AbortController(); pending.current = controller; setBusy(true); setError('')
@@ -57,6 +57,7 @@ export function Facts({ api, sessionId, book, chapterId, entry, selection, writa
     if (live.current) { setView(result); if (accept) adopted() }
   })
   return <section className="sn-facts" aria-label={t('facts')}>
+    {backToInbox && <Button size="sm" disabled={busy} onClick={backToInbox}>{t('inboxBack')}</Button>}
     <h3>{t('facts')}</h3>
     {error && <p role="alert">{t(error)}</p>}
     <p role="status">{t(!items.some(item => item.state === 'accepted' && item.coverage === 'chapter') ? 'factsPending' : 'factsAccepted')}</p>

@@ -9,7 +9,7 @@ import { BookStore } from './book-store.js'
 import type { TextGenerator } from './chapter-generator.js'
 
 const recordSchema = z.strictObject({ format: z.literal('super-novel-intent'), version: z.literal(1), request: saveIntentSchema, updatedAt: z.int().nonnegative() })
-const suggestionSchema = z.strictObject({ format: z.literal('super-novel-directions'), version: z.literal(1), request: suggestIntentSchema, directions: directionsSchema.shape.directions,
+const suggestionSchema = z.strictObject({ format: z.literal('super-novel-directions'), version: z.literal(1), request: suggestIntentSchema, directions: directionsSchema.shape.directions, rejected: z.boolean().optional(),
   createdAt: z.int().nonnegative(), elapsedMs: z.int().nonnegative(), usage: z.discriminatedUnion('state', [z.strictObject({ state: z.literal('unknown') }), z.strictObject({ state: z.literal('reported'), inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative(), cacheReadTokens: z.int().nonnegative().optional(), cacheWriteTokens: z.int().nonnegative().optional(), totalTokens: z.int().nonnegative().optional(), reasoningTokens: z.int().nonnegative().optional() })]) })
 type Suggestion = z.infer<typeof suggestionSchema>
 
@@ -57,6 +57,10 @@ export class IntentStore {
         throw new BookError('revision-conflict')
       }
       await this.validateSource(request)
+      if (request.sourceProposalId) {
+        const suggestion = await this.suggestion(request.bookId, request.sourceProposalId)
+        if (suggestion.chapterId !== request.chapterId || suggestion.intentVersion !== request.expectedVersion || suggestion.state !== 'review') throw new BookError('proposal-stale')
+      }
       if (request.expectedVersion >= 100_000) throw new BookError('too-large')
       await this.files.directory(this.folder(request.bookId, request.chapterId))
       const text = json({ format: 'super-novel-intent', version: 1, request, updatedAt: Date.now() })
@@ -78,9 +82,29 @@ export class IntentStore {
   }
   private async suggestionView(value: Suggestion): Promise<IntentSuggestion> {
     const { request } = value, source = await this.chapter(request.bookId, request.chapterId), intent = await this.read(request.bookId, request.chapterId)
+    const receipt = await this.files.read(join(this.folder(request.bookId, request.chapterId), `${String(request.expectedVersion + 1).padStart(8, '0')}.json`))
+    let accepted = false
+    if (receipt.exists) { this.parse(receipt.text, request.bookId, request.chapterId, request.expectedVersion + 1); accepted = recordSchema.parse(JSON.parse(receipt.text)).request.sourceProposalId === request.proposalId }
     return { proposalId: request.proposalId, bookId: request.bookId, chapterId: request.chapterId, sourceHash: request.expectedHash, intentVersion: request.expectedVersion,
-      directions: value.directions, createdAt: value.createdAt, usage: value.usage, elapsedMs: value.elapsedMs,
-      state: source.hash === request.expectedHash && !source.externallyModified && intent.version === request.expectedVersion && !source.book.recoveryRequired ? 'review' : 'expired' }
+      candidateHash: hash(json(value.directions)), directions: value.directions, createdAt: value.createdAt, usage: value.usage, elapsedMs: value.elapsedMs,
+      state: accepted ? 'accepted' : value.rejected ? 'rejected' : source.hash === request.expectedHash && !source.externallyModified && intent.version === request.expectedVersion && !source.book.recoveryRequired ? 'review' : 'expired' }
+  }
+  async suggestion(bookId: string, proposalId: string): Promise<IntentSuggestion> {
+    const file = await this.files.read(this.suggestionPath(bookId, proposalId))
+    if (!file.exists) throw new BookError('proposal-not-found')
+    return await this.suggestionView(this.parseSuggestion(file.text, bookId, proposalId))
+  }
+  async dismiss(bookId: string, proposalId: string, expectedHash: string, signal: AbortSignal): Promise<IntentSuggestion> {
+    return await this.files.lock(join('novels', idSchema.parse(bookId), '.intent.lock'), async () => {
+      signal.throwIfAborted()
+      const path = this.suggestionPath(bookId, proposalId), file = await this.files.read(path)
+      if (!file.exists) throw new BookError('proposal-not-found')
+      const value = this.parseSuggestion(file.text, bookId, proposalId), view = await this.suggestionView(value)
+      if (view.candidateHash !== expectedHash) throw new BookError('operation-conflict')
+      if (view.state === 'accepted') throw new BookError('proposal-finalized')
+      if (!value.rejected) { signal.throwIfAborted(); await this.files.replace(path, json({ ...value, rejected: true }), file) }
+      return await this.suggestion(bookId, proposalId)
+    })
   }
   async list(bookId: string, chapterId: string): Promise<IntentSuggestion[]> {
     await this.chapter(bookId, chapterId)

@@ -84,6 +84,11 @@ test('real Cordis service dispatches candidate remotes with optional model servi
   const documentPreview = await ctx.superNovel.documentPreview(sessionId, previewRequest, signal)
   assert.equal(documentPreview.document.content, '正式采纳前的候选。'); assert.equal(documentPreview.proposal.proposalId, request.proposalId)
   assert.equal(calls, callsBeforeReading)
+  const inboxQuery = { workspaceId: library.workspaceId, bookId: book.bookId, kind: 'all', cursor: '' }
+  assert.equal((await ctx.superNovel.candidateInbox(sessionId, inboxQuery, signal)).items.length, 0)
+  assert.equal(calls, callsBeforeReading)
+  await assert.rejects(ctx.superNovel.candidateInbox(sessionId, { ...inboxQuery, workspaceId: '0'.repeat(64) }, signal), error => error.details.reason === 'location-changed')
+  await assert.rejects(ctx.superNovel.dismissSuggestion(sessionId, { workspaceId: library.workspaceId, bookId: book.bookId, proposalId: randomUUID(), kind: 'intent', expectedCandidateHash: '0'.repeat(64) }, signal), error => error.details.reason === 'read-only')
   await assert.rejects(ctx.superNovel.searchBook(sessionId, { ...searchRequest, workspaceId: '0'.repeat(64) }, signal), error => error.details.reason === 'location-changed')
   await assert.rejects(ctx.superNovel.documentPreview(sessionId, { ...previewRequest, workspaceId: '0'.repeat(64) }, signal), error => error.details.reason === 'location-changed')
   setSandboxMode(session, 'workspace-write')

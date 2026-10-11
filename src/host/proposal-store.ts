@@ -49,6 +49,7 @@ export class ProposalStore {
 
   async create(sessionId: string, input: GenerateChapterRequest, signal: AbortSignal, owner: GenerationOwner = { machine: generationMachine, pid: process.pid, runtimeId: randomUUID() }): Promise<{ proposal: Proposal; created: boolean }> {
     const request = generationRequestSchema.parse(input)
+    if (request.workspaceId && request.workspaceId !== this.workspaceId) throw new BookError('location-changed')
     return await this.locked(request.bookId, async () => {
       signal.throwIfAborted()
       const file = await this.files.read(this.path(request.bookId, request.proposalId), 32 * 1024 * 1024)
@@ -69,6 +70,7 @@ export class ProposalStore {
   /** Shared pure snapshot builder: preview and generation cannot select different inputs. */
   async prepareSnapshot(sessionId: string, input: GenerateChapterRequest, signal: AbortSignal, owner: GenerationOwner = { machine: generationMachine, pid: process.pid, runtimeId: randomUUID() }): Promise<Proposal> {
     const request = generationRequestSchema.parse(input)
+    if (request.workspaceId && request.workspaceId !== this.workspaceId) throw new BookError('location-changed')
     signal.throwIfAborted()
     const chapter = await this.books.readChapter(request.bookId, request.chapterId)
     if (['facts', 'voice'].includes(chapter.book.chapters.find(item => item.chapterId === request.chapterId)?.kind ?? '')) throw new BookError('invalid-material')

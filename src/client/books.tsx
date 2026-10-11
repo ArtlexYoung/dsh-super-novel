@@ -14,6 +14,7 @@ import { WritingPreferences, useWritingPreferences } from './writing-preferences
 import { StoryStatePanel } from './story-state.js'
 import { ChapterIntent } from './chapter-intent.js'
 import { MaterialLibrary } from './material-library.js'
+import { CandidateInboxPanel } from './candidate-inbox.js'
 import { Backups } from './backups.js'
 import { StorageSettings } from './storage-location.js'
 import { DraftRecovery } from './draft-recovery.js'
@@ -88,6 +89,8 @@ export function Books({ api, sessionId, t, setup }) {
   const [materialKind, setMaterialKind] = useState('all')
   const [linkedChapter, setLinkedChapter] = useState('all')
   const [preferredProposal, setPreferredProposal] = useState('')
+  const [preferredInbox, setPreferredInbox] = useState(null)
+  useEffect(() => setPreferredInbox(null), [library?.workspaceId, bookId])
   const [workTab, setWorkTab] = useState(() => { try { const tab = localStorage.getItem('super-novel.workTab'); return ['writing', 'references', 'assessment', 'revisions'].includes(tab) ? tab : 'writing' } catch { return 'writing' } }), [search, setSearch] = useState(''), [directoryPage, setDirectoryPage] = useState(0)
   useEffect(() => { try { localStorage.setItem('super-novel.workTab', workTab) } catch {} }, [workTab])
   const pending = useRef(null)
@@ -104,7 +107,7 @@ export function Books({ api, sessionId, t, setup }) {
   const planning = currentChapter?.kind && currentChapter.kind !== 'chapter'
   const activeTab = planning && !['writing', 'revisions'].includes(workTab) ? 'writing' : workTab
   const managementOpen = pane === 'management'
-  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'selection-material', 'selection-ai', 'intent', 'story-state', 'search', 'reader'].includes(pane) || compact && pane === 'directory'
+  const overlayOpen = managementOpen || ['materials', 'create-material', 'library', 'inbox', 'selection-material', 'selection-ai', 'intent', 'story-state', 'search', 'reader'].includes(pane) || compact && pane === 'directory'
   const capturePosition = () => {
     if (overlayOpen || activeTab !== 'writing') return
     const current = entryRef.current, element = editor.current
@@ -148,7 +151,14 @@ export function Books({ api, sessionId, t, setup }) {
       return () => cancelAnimationFrame(frame)
     }
   }, [pane, compact, activeTab, documentIdentity, !!entry, editing])
-  useLayoutEffect(() => { setPane(book?.recoveryRequired ? 'management' : '') }, [library?.workspaceId, bookId, book?.recoveryRequired])
+  useLayoutEffect(() => { setPane('') }, [library?.workspaceId, bookId])
+  useEffect(() => {
+    if (!book?.recoveryRequired) return
+    // A read can observe another writer's prepared journal. Recheck once;
+    // recovery remains explicit, and an existing editor must stay mounted.
+    const timer = setTimeout(() => setRefresh(value => value + 1), 600)
+    return () => clearTimeout(timer)
+  }, [bookId, book?.recoveryRequired])
   useEffect(() => { if (library && !library.books.length) setPane('management') }, [library?.workspaceId, library?.books.length])
   const visible = book?.chapters.filter(item => documents === 'chapters' ? !item.kind || item.kind === 'chapter' : item.kind && item.kind !== 'chapter' && item.kind !== 'facts' && item.kind !== 'voice') ?? []
   const clearFilters = () => { setSearch(''); setMaterialKind('all'); setLinkedChapter('all'); setDirectoryPage(0) }
@@ -201,7 +211,7 @@ export function Books({ api, sessionId, t, setup }) {
     const controller = new AbortController()
     const generation = ++sequence.current
     const identity = `${library?.workspaceId ?? ''}:${bookId}:${chapterId}`
-    if (entryIdentity.current !== identity || !book || book.recoveryRequired) { setEntry(null); setSelection({ start: 0, end: 0 }); setDraftState({ kind: 'formal', savedAt: 0 }) }
+    if (entryIdentity.current !== identity || !book) { setEntry(null); setSelection({ start: 0, end: 0 }); setDraftState({ kind: 'formal', savedAt: 0 }) }
     entryIdentity.current = identity
     if (!book) { setReadingDisk(false); return () => controller.abort() }
     if (book.recoveryRequired) { setReadingDisk(false); return () => controller.abort() }
@@ -240,9 +250,13 @@ export function Books({ api, sessionId, t, setup }) {
         }
       }
       if (controller.signal.aborted || sequence.current !== generation) return
+      if (errorSource.current === 'chapter') { errorSource.current = 'action'; setErrorState('') }
       setNotice(draft && draft !== current ? 'localDraft' : value.externallyModified ? 'external' : '')
       setReadingDisk(false)
-    }).catch(error => { if (!controller.signal.aborted) { setError(error.reason ?? 'storage-failed'); setReadingDisk(false) } })
+    }).catch(error => { if (!controller.signal.aborted) {
+      setErrorState(previous => { if (previous && errorSource.current === 'action') return previous; errorSource.current = 'chapter'; return error.reason ?? 'storage-failed' })
+      setReadingDisk(false)
+    } })
     return () => { controller.abort(); writers.current.get(draftKey(library.workspaceId, bookId, chapterId))?.attempt() }
   }, [api, sessionId, library?.workspaceId, bookId, chapterId, book?.revision, book?.recoveryRequired, refresh])
 
@@ -372,7 +386,7 @@ export function Books({ api, sessionId, t, setup }) {
     change('save', { content: entry.content, expectedHash: entry.baseHash, expectedRevision: entry.bookRevision, operationId: entry.operationId })
   }
 
-  const proposals = entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} preferredProposal={preferredProposal} writingAction={writingAction} openIntent={() => openPane('intent')} adopted={() => setRefresh(value => value + 1)} />
+  const proposals = entry && <Proposals key={`${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} writable={writable} dirty={dirty} selection={selection} t={t} revisionHint={refresh} preferredProposal={preferredProposal} writingAction={writingAction} backToInbox={preferredInbox ? () => openPane('inbox') : null} openIntent={() => openPane('intent')} adopted={() => setRefresh(value => value + 1)} />
   const adjacentChapter = direction => action(async () => {
     const chapters = book.chapters.filter(item => !item.kind || item.kind === 'chapter'), at = chapters.findIndex(item => item.chapterId === chapterId), target = chapters[at + direction]
     if (!target) return
@@ -389,6 +403,17 @@ export function Books({ api, sessionId, t, setup }) {
   })
   const openReader = target => { capturePosition(); setReader({ target, origin: pane, id: crypto.randomUUID() }); setPane('reader') }
   const manageMaterials = () => { capturePosition(); setPane('library') }
+  const reviewInboxItem = item => action(async () => {
+    if (item.kind === 'source') { setPreferredInbox({ ...item, id: crypto.randomUUID() }); setPane('library'); return }
+    const target = book.chapters.find(document => document.chapterId === item.chapterId)
+    if (!target) throw { reason: 'chapter-not-found' }
+    await flushDraft(); capturePosition(); positions.current.flush()
+    setPreferredInbox({ ...item, id: crypto.randomUUID() }); setChapterId(item.chapterId); clearFilters()
+    setDocuments(!target.kind || target.kind === 'chapter' ? 'chapters' : 'materials'); setEditing(true)
+    setPreferredProposal(item.kind === 'writing' ? item.proposalId : '')
+    setWorkTab(item.kind === 'writing' ? 'revisions' : item.kind === 'facts' ? 'references' : 'writing')
+    setPane(item.kind === 'intent' ? 'intent' : item.kind === 'story' ? 'story-state' : '')
+  })
   const materialCreated = (value, id, proposalId, generated) => {
     applyBook(value); setChapterId(id); setPreferredProposal(proposalId); clearFilters()
     // Creation is acknowledged before generation. Keep its form visible until
@@ -401,6 +426,7 @@ export function Books({ api, sessionId, t, setup }) {
   }}>
     <header className="sn-project-heading"><Button size="sm" className="sn-project-title" aria-label={t('bookManager')} aria-expanded={managementOpen} disabled={busy} onClick={() => openPane('management')}><span>{book?.title ?? t('title')}</span><IconChevronDownOutline14 /></Button>{book && !book.recoveryRequired && <IconButton label={t('searchBook')} icon={IconSearchOutline16} disabled={busy} onClick={() => openPane('search')} />}{entry && (overlayOpen || activeTab !== 'writing') && <span className="sn-project-save" role="status" title={dirty ? t(`draft-${draftState.kind}`) : t('saved')}>{dirty ? t(`draft-${draftState.kind}`) : t('saved')}</span>}{library && !library.writable && <Tag tone="neutral">{t('readOnlyShort')}</Tag>}</header>
     {error && <p role="alert" className="sn-alert">{t(error)}</p>}
+    {book?.recoveryRequired && entry && <p role="alert" className="sn-alert sn-pending-save">{t('recovery-required')} <Button size="sm" onClick={() => setRefresh(value => value + 1)}>{t('refresh')}</Button><Button size="sm" onClick={() => openPane('management')}>{t('openRecovery')}</Button></p>}
     {dirty && ['failed', 'browser-failed'].includes(draftState.kind) && <p role="alert" className="sn-alert sn-draft-alert">{t(draftState.kind === 'failed' ? draftState.reason : 'draftFailed')} <Button size="sm" onClick={() => writerFor(library.workspaceId, bookId, chapterId).attempt()}>{t('retryDraft')}</Button><Button size="sm" onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</Button></p>}
     {stale && <p role="alert" className="sn-alert">{t('stale')} <Button size="sm" onClick={() => openPane('management')}>{t('openRecovery')}</Button></p>}
     {!library && !error && <p role="status">{t('loading')}</p>}
@@ -430,7 +456,7 @@ export function Books({ api, sessionId, t, setup }) {
     </>}
     <StorageSettings api={api} sessionId={sessionId} revision={refresh} writable={!busy} t={t} beforeSwitch={async () => { capturePosition(); positions.current.flush(); await flushDraft() }} switching={setReadingDisk} switched={() => { setEntry(null); setLibrary(null); setBookId(''); setChapterId(''); setRefresh(value => value + 1) }} />
     {library && <Backups key={`backup:${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} writable={library.writable && !busy} t={t} beforeBackup={flushDraft} restored={() => setRefresh(value => value + 1)} />}
-    {book && <Button size="sm" onClick={manageMaterials}>{t('materialLibrary')}</Button>}
+    {book && <div className="sn-row sn-recovery-actions"><Button size="sm" onClick={manageMaterials}>{t('materialLibrary')}</Button><Button size="sm" onClick={() => openPane('inbox')}>{t('candidateInbox')}</Button></div>}
     {currentChapter && !planning && <div className="sn-more-tools"><Button size="sm" onClick={() => openPane('story-state')}>{t('storyState')}</Button><Button size="sm" onClick={() => openPane('intent')}>{t('chapterIntent')}</Button><Button size="sm" id="sn-tab-references" onClick={() => showTool('references')}>{t('tab-references')}</Button><Button size="sm" id="sn-tab-assessment" onClick={() => showTool('assessment')}>{t('tab-assessment')}</Button></div>}
     {currentChapter && <section className="sn-document-management"><h3>{currentChapter.title}</h3>
           <details className="sn-document-options" open={documentOptionsOpen} onToggle={event => setDocumentOptionsOpen(event.currentTarget.open)}><summary>{t('documentOptions')}</summary><div className="sn-row sn-recovery-actions"><Button size="sm" disabled={!entry || busy || readingDisk} onClick={readDisk}>{t('reloadDisk')}</Button><Button size="sm" disabled={!entry} onClick={() => download(entry.content, currentChapter.title)}>{t('exportDraft')}</Button>
@@ -450,8 +476,8 @@ export function Books({ api, sessionId, t, setup }) {
     </div>
     </WorkspacePanel>
     {library && !library.books.length && <div className="sn-empty-state" inert={overlayOpen} aria-hidden={overlayOpen ? 'true' : undefined}><IconEditOutline16 /><h3>{t('emptyLibraryTitle')}</h3><p>{t('emptyLibraryHint')}</p><Button size="sm" onClick={() => openPane('management')}>{t('createBook')}</Button></div>}
-    {book?.recoveryRequired && <div className="sn-empty-state" inert={overlayOpen} aria-hidden={overlayOpen ? 'true' : undefined}><h3>{t('recover')}</h3><p>{t('recovery-required')}</p><Button size="sm" onClick={() => openPane('management')}>{t('openRecovery')}</Button></div>}
-    {book && !book.recoveryRequired && <div className="sn-book-workspace">
+    {book?.recoveryRequired && !entry && <div className="sn-empty-state" inert={overlayOpen} aria-hidden={overlayOpen ? 'true' : undefined}><h3>{t('recover')}</h3><p>{t('recovery-required')}</p><Button size="sm" onClick={() => openPane('management')}>{t('openRecovery')}</Button></div>}
+    {book && (!book.recoveryRequired || entry) && <div className="sn-book-workspace">
       <WorkspacePanel id="sn-panel-directory" title={t('documentDirectory')} open={!compact || pane === 'directory'} inline={!compact} inactive={!compact && overlayOpen} close={closePane} t={t}>
       <DocumentDirectory book={book} chapterId={chapterId} documents={documents} busy={busy} search={search} setSearch={setSearch} kind={materialKind} setKind={setMaterialKind} linked={linkedChapter} setLinked={setLinkedChapter} page={directoryPage} setPage={setDirectoryPage} clear={clearFilters} t={t} select={id => editReference(id)} switchDocuments={value => { capturePosition(); setDocuments(value) }}>
         {documents === 'chapters' && <form className="sn-row" onSubmit={event => { event.preventDefault(); const key = `chapter:${bookId}:${book.revision}:${chapterTitle.trim()}`; if (!requestIds.current.has(key)) requestIds.current.set(key, crypto.randomUUID()); change('create', { chapterId: requestIds.current.get(key), title: chapterTitle }) }}>
@@ -490,7 +516,7 @@ export function Books({ api, sessionId, t, setup }) {
           {planning && <Button className="sn-return-content" size="sm" onClick={() => setWorkTab('writing')}>{t('contentTab')} →</Button>}
           </div>
           <div id="sn-panel-references" aria-labelledby="sn-tab-references" hidden={planning || workTab !== 'references'} role="tabpanel">
-          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <><Facts key={`facts:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} revisionHint={refresh} adopted={() => setRefresh(value => value + 1)} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} /><Voices key={`voices:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} changed={applyBook} /></>}
+          {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <><Facts key={`facts:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} revisionHint={refresh} preferred={preferredInbox?.kind === 'facts' && preferredInbox.chapterId === chapterId ? preferredInbox : null} adopted={() => setRefresh(value => value + 1)} backToInbox={preferredInbox ? () => openPane('inbox') : null} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} /><Voices key={`voices:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} changed={applyBook} /></>}
           </div>
           <div id="sn-panel-assessment" aria-labelledby="sn-tab-assessment" hidden={planning || workTab !== 'assessment'} role="tabpanel">
           {entry && (!currentChapter.kind || currentChapter.kind === 'chapter') && <Reviews key={`reviews:${bookId}:${chapterId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} entry={entry} selection={selection} writable={writable} dirty={dirty} t={t} revisionHint={`${refresh}:${workTab === 'assessment'}`} revised={id => { setPreferredProposal(id); setRefresh(value => value + 1); setWorkTab('revisions') }} locate={(start, end) => { setWorkTab('writing'); setEditing(true); setTimeout(() => { editor.current?.focus(); editor.current?.setSelectionRange(start, end) }, 0) }} />}
@@ -498,8 +524,8 @@ export function Books({ api, sessionId, t, setup }) {
         </>}
       </main>
     </div>}
-    {book && entry && !planning && <WorkspacePanel id="sn-panel-story-state" title={t('storyState')} open={pane === 'story-state'} close={closePane} t={t}><StoryStatePanel key={`${library.workspaceId}:${bookId}:${chapterId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={chapterId} branchId={branch.current} entry={entry} selection={selection} open={pane === 'story-state'} writable={writable} dirty={dirty} t={t} changed={() => setRefresh(value => value + 1)} locate={(start, end) => { showWriting(); setEditing(true); requestAnimationFrame(() => { editor.current?.focus(); editor.current?.setSelectionRange(start,end) }) }} openChapter={id => action(async () => { await flushDraft(); capturePosition(); setChapterId(id); setDocuments('chapters'); setPane(''); setWorkTab('writing') })} /></WorkspacePanel>}
-    {book && entry && !planning && <WorkspacePanel id="sn-panel-intent" title={t('chapterIntent')} open={pane === 'intent'} close={closePane} t={t}><ChapterIntent key={`${library.workspaceId}:${bookId}:${chapterId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={chapterId} entry={entry} open={pane === 'intent'} writable={writable} dirty={dirty} t={t} changed={() => setRefresh(value => value + 1)} /></WorkspacePanel>}
+    {book && entry && !planning && <WorkspacePanel id="sn-panel-story-state" title={t('storyState')} open={pane === 'story-state'} close={closePane} t={t}><StoryStatePanel key={`${library.workspaceId}:${bookId}:${chapterId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={chapterId} revisionHint={refresh} branchId={branch.current} backToInbox={preferredInbox ? () => openPane('inbox') : null} preferred={preferredInbox?.kind === 'story' && preferredInbox.chapterId === chapterId ? preferredInbox : null} entry={entry} selection={selection} open={pane === 'story-state'} writable={writable} dirty={dirty} t={t} changed={() => setRefresh(value => value + 1)} locate={(start, end) => { showWriting(); setEditing(true); requestAnimationFrame(() => { editor.current?.focus(); editor.current?.setSelectionRange(start,end) }) }} openChapter={id => action(async () => { await flushDraft(); capturePosition(); setChapterId(id); setDocuments('chapters'); setPane(''); setWorkTab('writing') })} /></WorkspacePanel>}
+    {book && entry && !planning && <WorkspacePanel id="sn-panel-intent" title={t('chapterIntent')} open={pane === 'intent'} close={closePane} t={t}><ChapterIntent key={`${library.workspaceId}:${bookId}:${chapterId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} revisionHint={refresh} chapterId={chapterId} backToInbox={preferredInbox ? () => openPane('inbox') : null} preferred={preferredInbox?.kind === 'intent' && preferredInbox.chapterId === chapterId ? preferredInbox : null} entry={entry} open={pane === 'intent'} writable={writable} dirty={dirty} t={t} changed={() => setRefresh(value => value + 1)} /></WorkspacePanel>}
     {entry && <WorkspacePanel id="sn-panel-selection-ai" title={t('selectionAI')} open={pane === 'selection-ai'} close={closePane} t={t}>
       <p className="sn-notice">{t(dirty ? 'saveBeforeAI' : 'selectionAIRange')}</p>
       {selection.end > selection.start && <pre className="sn-reference-text">{entry.content.slice(selection.start, selection.end)}</pre>}
@@ -516,9 +542,10 @@ export function Books({ api, sessionId, t, setup }) {
         openPane('library')
       })}>{t('confirmSelectionMaterial')}</Button>
     </WorkspacePanel>}
-    {book && <WorkspacePanel id="sn-panel-library" title={t('materialLibrary')} open={pane === 'library'} close={closePane} t={t}><MaterialLibrary key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={planning ? '' : chapterId} branchId={branch.current} writable={libraryWritable} t={t} changed={applyBook} edit={editReference} navigate={openReader} beforeGenerate={flushDraft} candidate={(id, proposalId) => { capturePosition(); setDocuments('materials'); setChapterId(id); setPreferredProposal(proposalId); setPane(''); setWorkTab('revisions') }} /></WorkspacePanel>}
+    {book && <WorkspacePanel id="sn-panel-library" title={t('materialLibrary')} open={pane === 'library'} close={closePane} t={t}><MaterialLibrary key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} chapterId={planning ? '' : chapterId} branchId={branch.current} preferred={preferredInbox?.kind === 'source' ? preferredInbox : null} writable={libraryWritable} backToInbox={preferredInbox ? () => openPane('inbox') : null} t={t} changed={applyBook} edit={editReference} navigate={openReader} beforeGenerate={flushDraft} candidate={(id, proposalId) => { capturePosition(); setDocuments('materials'); setChapterId(id); setPreferredProposal(proposalId); setPane(''); setWorkTab('revisions') }} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-create-material" title={t('newMaterialWithAI')} open={pane === 'create-material'} close={closePane} t={t}><MaterialCreator key={`${library.workspaceId}:${bookId}`} active={pane === 'create-material'} api={api} sessionId={sessionId} book={book} workspaceId={library.workspaceId} writable={writable} t={t} onBusy={setBusy} created={materialCreated} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-materials" title={t('referenceList')} open={pane === 'materials'} close={closePane} t={t}><ReferencePanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} book={book} chapterId={chapterId} open={pane === 'materials'} writable={writable} workspaceId={library.workspaceId} t={t} edit={editReference} navigate={openReader} manage={manageMaterials} /></WorkspacePanel>}
+    {book && <WorkspacePanel id="sn-panel-inbox" title={t('candidateInbox')} open={pane === 'inbox'} close={closePane} t={t}><CandidateInboxPanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} open={pane === 'inbox'} revisionHint={refresh} t={t} review={reviewInboxItem} organize={() => openPane('create-material')} /></WorkspacePanel>}
     {book && <WorkspacePanel id="sn-panel-search" title={t('searchBook')} open={pane === 'search'} close={closePane} t={t}><BookSearchPanel key={`${library.workspaceId}:${bookId}`} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} open={pane === 'search'} dirty={dirty} t={t} preview={openReader} /></WorkspacePanel>}
     {book && reader && <WorkspacePanel id="sn-panel-reader" title={t('documentPreview')} open={pane === 'reader'} close={closePane} t={t}><DocumentReader key={reader.id} api={api} sessionId={sessionId} workspaceId={library.workspaceId} book={book} target={reader.target} open={pane === 'reader'} writable={writable} t={t} back={() => setPane(reader.origin || 'materials')} edit={editReference} /></WorkspacePanel>}
     </div>

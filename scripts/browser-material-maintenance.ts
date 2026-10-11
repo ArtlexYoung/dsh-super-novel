@@ -46,6 +46,22 @@ export async function checkMaterialMaintenance(page, output, identity, resize = 
   await page.keyboard.press('Escape'); await showContent(page)
   assert(await body.evaluate((element, original) => element === original, original)); assert.equal(await body.inputValue(), originalText)
   await openLibrary(); assert.equal(await tags.inputValue(), '未确认标签', 'closing a tool retains form input')
+  let release, prepared
+  const held = new Promise(resolve => { release = resolve }), ready = new Promise(resolve => { prepared = resolve })
+  const heldStore = await BookStore.at(root, { afterStage: async stage => { if (stage === 'prepared') { prepared(); await held } } })
+  let stagedBook = await book(), stagedText = await books.readChapter(identity.bookId, identity.second)
+  const stagedSave = heldStore.mutate({ operationId: randomUUID(), bookId: identity.bookId, chapterId: identity.second, expectedRevision: stagedBook.revision, expectedHash: stagedText.hash, action: 'save', title: '', beforeChapterId: '', content: stagedText.content + ' 并发保存。' }, signal())
+  try {
+    await ready
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await page.locator('.sn-pending-save').waitFor()
+    assert(await body.evaluate((element, original) => element === original, original), 'a prepared save in another window must preserve the editor')
+    assert.equal(await tags.inputValue(), '未确认标签', 'prepared save must preserve the open form')
+    assert(await library.getByRole('button', { name: 'Save material details', exact: true }).isDisabled())
+  } finally { release(); await stagedSave }
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await page.locator('.sn-pending-save').waitFor({ state: 'hidden' })
+  assert.equal(await tags.inputValue(), '未确认标签')
   let current = await book(), second = await books.readChapter(identity.bookId, identity.second)
   await books.mutate({ operationId: randomUUID(), bookId: identity.bookId, chapterId: identity.second, expectedRevision: current.revision, expectedHash: second.hash, action: 'save', title: '', beforeChapterId: '', content: second.content + ' 无关更新。' }, signal())
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
@@ -179,7 +195,7 @@ export async function checkMaterialMaintenance(page, output, identity, resize = 
   await page.waitForFunction(() => document.querySelector('input[aria-label="Rename"]')?.value === '重试后创建')
   assert.equal((await book()).chapters.filter(item => item.title === '重试后创建').length, 1)
   assert.equal(await calls(), beforeCalls)
-  await writeFile(join(output, 'material-maintenance-validation.json'), JSON.stringify({ result: 'PASS', unrelatedRevisionRetainsInput: true, metadataConflictRetainsInput: true,
+  await writeFile(join(output, 'material-maintenance-validation.json'), JSON.stringify({ result: 'PASS', concurrentPreparedRetainsEditorAndForm: true, unrelatedRevisionRetainsInput: true, metadataConflictRetainsInput: true,
     independentBranches: true, diskRecoveryWithoutBrowserCache: ['material', 'event', 'foreshadow'], savedViews: true, filterFailureRetainsName: true, maintenance: true, previewFreezesSelection: true, confirmedSaveDistinctFromCleanupFailure: true, cleanupRetryPreservesNewerInput: true,
     stalePreviewRefused: true, backgroundRefreshRetainsWriteFailure: true, restoreActiveArchivedEditor: true, batchActions: ['add-tags', 'link-chapter', 'archive'], batchTextUnchanged: true, widths: [300, 420, 900], modelCalls: 0 }, null, 2))
   console.log('PASS material maintenance: input retention, disk form recovery, saved views, atomic batches and 300/420/900px.')

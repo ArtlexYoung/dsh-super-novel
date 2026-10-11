@@ -7,7 +7,7 @@ import { MaterialBatch } from './material-batch.js'
 import { MaterialViews, defaultMaterialFilters } from './material-views.js'
 import { unwrap } from './books.js'
 
-export function MaterialLibrary({ api, sessionId, workspaceId, book, branchId, chapterId, writable, t, changed, edit, navigate, beforeGenerate, candidate }) {
+export function MaterialLibrary({ api, sessionId, workspaceId, book, branchId, chapterId, preferred, writable, t, changed, edit, navigate, beforeGenerate, candidate, backToInbox }) {
   const [filters, setFilters] = useState(defaultMaterialFilters), [offset, setOffset] = useState(0)
   const [result, setResult] = useState(null), [selected, setSelected] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [batch, setBatch] = useState(false), [batchLocked, setBatchLocked] = useState(false), [selectedIds, setSelectedIds] = useState([]), [viewName, setViewName] = useState(''), [viewId, setViewId] = useState('')
@@ -16,6 +16,7 @@ export function MaterialLibrary({ api, sessionId, workspaceId, book, branchId, c
   const [views, setViews] = useState(() => viewsStore.current.read()), [viewError, setViewError] = useState('')
   const upgrade = useRef({ operationId: crypto.randomUUID(), backupId: crypto.randomUUID() }), pending = useRef(false)
   const item = book.chapters.find(item => item.chapterId === selected), chapters = book.chapters.filter(item => !item.kind || item.kind === 'chapter')
+  useEffect(() => { if (preferred?.chapterId) setSelected(preferred.chapterId) }, [preferred?.id])
   const update = (key, value) => { setFilters(previous => ({ ...previous, [key]: value })); setViewId('') }
   useEffect(() => setOffset(0), [filters])
   useEffect(() => {
@@ -32,7 +33,7 @@ export function MaterialLibrary({ api, sessionId, workspaceId, book, branchId, c
   return <div className="sn-material-library">
     {error && <p role="alert">{t(error)} <Button size="sm" disabled={busy} onClick={() => run(refresh)}>{t('refresh')}</Button></p>}
     {book.schemaVersion === 1 && <section className="sn-recovery"><p>{t('upgradeMaterialsHint')}</p><Button size="sm" disabled={!writable || busy} onClick={() => run(async signal => changed(unwrap(await api.upgradeBook(sessionId, { workspaceId, bookId: book.bookId, expectedRevision: book.revision, ...upgrade.current }, signal))))}>{t('enableMaterialLibrary')}</Button></section>}
-    {item ? <MaterialDetail key={item.chapterId} {...{ api, sessionId, workspaceId, book, item, branchId, writable, t, changed, edit, navigate, beforeGenerate, candidate }} close={() => setSelected('')} /> : <>
+    {item ? <MaterialDetail key={item.chapterId} {...{ api, sessionId, workspaceId, book, item, branchId, writable, t, changed, edit, navigate, beforeGenerate, candidate, backToInbox }} close={() => setSelected('')} /> : <>
       <div hidden={batchLocked}>
       <Input className="sn-input" type="search" aria-label={t('fulltextMaterials')} placeholder={t('fulltextMaterials')} value={filters.query} maxLength={500} onChange={event => update('query', event.target.value)} />
       <div className="sn-row"><Select aria-label={t('referenceType')} value={filters.kind} onChange={event => update('kind', event.target.value)}><option value="all">{t('allMaterialTypes')}</option>{materialKinds.map(value => <option key={value} value={value}>{t(value)}</option>)}</Select><Button size="sm" aria-pressed={filters.favorite} onClick={() => update('favorite', !filters.favorite)}>{t('favorite')}</Button></div>

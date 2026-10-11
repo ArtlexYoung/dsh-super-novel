@@ -92,6 +92,7 @@ export type ProposalMode = 'draft' | 'continue' | 'rewrite' | 'polish'
 export type ProposalState = 'generating' | 'review' | 'accepted' | 'rejected' | 'expired' | 'interrupted'
 export interface GenerateChapterRequest {
   readonly proposalId: string
+  readonly workspaceId?: string
   readonly bookId: string
   readonly chapterId: string
   readonly expectedRevision: number
@@ -129,13 +130,14 @@ export interface StoryState {
 export interface SaveStoryStateRequest {
   readonly workspaceId: string; readonly bookId: string; readonly operationId: string; readonly expectedVersion: number; readonly expectedRevision: number
   readonly event?: StoryEvent; readonly foreshadow?: Foreshadow
+  readonly sourceProposalId?: string
 }
 export interface SuggestStoryStateRequest {
   readonly workspaceId: string; readonly bookId: string; readonly chapterId: string; readonly proposalId: string; readonly expectedRevision: number; readonly expectedHash: string
 }
 export interface StoryStateSuggestion {
   readonly proposalId: string; readonly bookId: string; readonly chapterId: string; readonly sourceHash: string
-  readonly state: 'review' | 'expired'; readonly events: readonly StoryEvent[]; readonly foreshadows: readonly Foreshadow[]
+  readonly state: 'review' | 'expired' | 'accepted' | 'rejected'; readonly candidateHash: string; readonly events: readonly StoryEvent[]; readonly foreshadows: readonly Foreshadow[]
   readonly createdAt: number; readonly usage: GenerationUsage; readonly elapsedMs: number
 }
 export interface StoryContext { readonly content: string; readonly hash: string; readonly state: 'ready' | 'expired' | 'over-budget'; readonly bytes: number }
@@ -154,6 +156,7 @@ export interface ChapterIntent {
 export interface SaveIntentRequest {
   readonly workspaceId: string; readonly operationId: string; readonly bookId: string; readonly chapterId: string
   readonly expectedVersion: number; readonly expectedRevision: number; readonly expectedHash: string; readonly intent: SceneIntent
+  readonly sourceProposalId?: string
 }
 export interface SuggestIntentRequest {
   readonly workspaceId: string; readonly proposalId: string; readonly bookId: string; readonly chapterId: string
@@ -163,7 +166,20 @@ export interface SuggestIntentRequest {
 export interface IntentSuggestion {
   readonly proposalId: string; readonly bookId: string; readonly chapterId: string; readonly sourceHash: string
   readonly intentVersion: number; readonly directions: readonly SceneIntent[]; readonly createdAt: number
-  readonly state: 'review' | 'expired'; readonly usage: GenerationUsage; readonly elapsedMs: number
+  readonly state: 'review' | 'expired' | 'accepted' | 'rejected'; readonly candidateHash: string; readonly usage: GenerationUsage; readonly elapsedMs: number
+}
+export interface SuggestionDismissal {
+  readonly workspaceId: string; readonly bookId: string; readonly proposalId: string; readonly kind: 'intent' | 'story'; readonly expectedCandidateHash: string
+}
+export interface CandidateInboxQuery {
+  readonly workspaceId: string; readonly bookId: string; readonly kind: 'all' | 'writing' | 'facts' | 'intent' | 'story' | 'source'; readonly cursor: string
+}
+export interface CandidateInboxItem {
+  readonly key: string; readonly kind: 'writing' | 'facts' | 'intent' | 'story' | 'source'; readonly proposalId: string; readonly chapterId: string
+  readonly title: string; readonly state: string; readonly reason: string; readonly createdAt: number; readonly sourceHash: string; readonly preview: string
+}
+export interface CandidateInbox {
+  readonly items: readonly CandidateInboxItem[]; readonly nextCursor: string; readonly complete: boolean; readonly unreadable: number; readonly scanned: number
 }
 export interface GenerationContextPreview {
   readonly bytes: number; readonly maxBytes: number; readonly state: 'ready' | 'over-budget'
@@ -212,6 +228,7 @@ export interface FactProposal {
   readonly sourceRevision: number
   readonly sourceHash: string
   readonly state: 'review' | 'accepted' | 'rejected' | 'expired'
+  readonly finalized: boolean
   readonly reason: string
   readonly facts: readonly EvidenceFact[]
   readonly createdAt: number

@@ -1,4 +1,11 @@
 export const zh = {
+  inboxBack: '返回待确认', contextBytes: '字节', contextSources: '查看已保存来源',
+  candidateInbox: '待确认', candidateInboxHint: '集中查看候选与需核对的资料来源。查看不调用模型。',
+  candidateInboxFilter: '待确认类型', candidateInboxPages: '待确认分页', 'inbox-all': '全部', 'inbox-writing': '正文与资料候选', 'inbox-facts': '事实建议', 'inbox-intent': '意图方向', 'inbox-story': '事件与伏笔建议', 'inbox-source': '需核对来源',
+  inboxIncomplete: '本次查询不完整，可继续下一页或刷新核对。', inboxUnreadable: '份记录无法读取', inboxEmpty: '当前没有待确认内容。', inboxNoItemsOnPage: '本页没有待确认内容，可继续查看。',
+  inboxExpiredHint: '生成时来源已变化。可查看原建议，不能直接确认。', inboxReview: '打开审阅', inboxCheckSource: '核对来源', inboxRejected: '建议已拒绝，原稿和已确认记录保留。',
+  inboxMaterialActions: '整理成资料', inboxMaterialActionsHint: '选定已保存章节或资料，指定资料类型和要求。每次生成调用一次模型，结果先作为候选。',
+  materialAIPreview: '核对资料整理范围', materialAIPreviewHint: '使用以下已保存内容，提议分类、标签、关联与内容整理。建议写在候选中，资料信息仍由作者核对保存。', materialAIConfirm: '确认范围，生成一次', materialAIStale: '资料或关联已变化，请重新核对范围。',
   "recoverFormDraft": "恢复表单草稿",
   "formRecoveryHint": "先预览再恢复输入，确认保存后才成为正式资料或记录。",
   "noFormDrafts": "没有待恢复的表单草稿。",
@@ -219,7 +226,7 @@ export const zh = {
   "quick-continue": "接着当前正文写下去，保持衔接和已确认设定，只返回新增正文。",
 
   confirmSelectionMaterial: '保存为新资料',
-  searchLinks: '搜索关联目标（最多显示 100 个）', aiOrganizeCandidate: 'AI 整理候选', organizeMaterialInstruction: '整理当前资料，相关资料作为参考。保留明确设定，合并重复描述但不删除来源文件。建议标签与别名单独列出，标出冲突、未知和新增建议；未来规划不能当已发生事实。只返回可审阅的资料候选，作者确认后保存。',
+  searchLinks: '搜索关联目标（最多显示 100 个）', aiOrganizeCandidate: 'AI 整理候选', organizeMaterialInstruction: '整理当前资料，相关资料作为参考。保留明确设定，合并重复描述但不删除来源文件。建议分类、标签、别名与关联章节单独列出，关联只用已有名称，标出冲突、未知和新增建议；未来规划不能当已发生事实。只返回可审阅的资料候选，作者确认后保存。',
   selectionToMaterial: '选区存为资料', selectionMaterialHint: '保存当前正文并启用资料库后可用。保留原文证据和版本。', selectionSource: '选区来源',
   "materialLibrary": "资料库",
   "fulltextMaterials": "搜索名称、别名或正文",
@@ -361,6 +368,13 @@ export const zh = {
 }
 
 export const en = {
+  inboxBack: 'Back to awaiting review', contextBytes: 'bytes', contextSources: 'Inspect saved sources',
+  candidateInbox: 'Awaiting review', candidateInboxHint: 'Review candidates and stale material sources here. Viewing does not call a model.',
+  candidateInboxFilter: 'Review type', candidateInboxPages: 'Review pages', 'inbox-all': 'All', 'inbox-writing': 'Text and material candidates', 'inbox-facts': 'Fact suggestions', 'inbox-intent': 'Intent directions', 'inbox-story': 'Event and foreshadow suggestions', 'inbox-source': 'Sources to check',
+  inboxIncomplete: 'This query is incomplete. Continue to the next page or refresh to check.', inboxUnreadable: 'unreadable records', inboxEmpty: 'Nothing is awaiting review.', inboxNoItemsOnPage: 'Nothing pending on this page. Continue to check more records.',
+  inboxExpiredHint: 'The source has changed. Inspect the original suggestion; it cannot be confirmed directly.', inboxReview: 'Open review', inboxCheckSource: 'Check source', inboxRejected: 'Suggestion rejected. Original text and confirmed records are retained.',
+  inboxMaterialActions: 'Organize as material', inboxMaterialActionsHint: 'Select saved chapters or materials, then choose a type and instructions. Each generation makes one model call and keeps the result as a candidate.',
+  materialAIPreview: 'Check material generation scope', materialAIPreviewHint: 'Use the saved content below to suggest a type, tags, links and content changes. Suggestions remain in the candidate; review and save metadata separately.', materialAIConfirm: 'Confirm scope and generate once', materialAIStale: 'The material or links changed. Check the scope again.',
   "recoverFormDraft": "Recover form draft",
   "formRecoveryHint": "Preview and restore input first. Only explicit confirmation updates materials or records.",
   "noFormDrafts": "No pending form drafts.",
@@ -581,7 +595,7 @@ export const en = {
   "quick-continue": "Continue from the end, maintaining continuity and confirmed settings. Return new prose only.",
 
   confirmSelectionMaterial: 'Save new material',
-  searchLinks: 'Search link targets (first 100 shown)', aiOrganizeCandidate: 'AI organization candidate', organizeMaterialInstruction: 'Organize this material using related references. Preserve established settings, consolidate repeated descriptions without deleting source files. List suggested tags and aliases separately, flag conflicts, unknowns and additions. Plans are not established facts. Return a reviewable candidate for author approval.',
+  searchLinks: 'Search link targets (first 100 shown)', aiOrganizeCandidate: 'AI organization candidate', organizeMaterialInstruction: 'Organize this material using related references. Preserve established settings, consolidate repeated descriptions without deleting source files. List suggested types, tags, aliases and chapter links separately; use existing names only for links. Flag conflicts, unknowns and additions. Plans are not established facts. Return a reviewable candidate for author approval.',
   selectionToMaterial: 'Save selection as material', selectionMaterialHint: 'Save text and enable the material library first. Source quote and version are retained.', selectionSource: 'Selection source',
   "materialLibrary": "Material library",
   "fulltextMaterials": "Search name, aliases or content",

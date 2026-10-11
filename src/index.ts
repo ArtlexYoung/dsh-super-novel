@@ -15,6 +15,8 @@ import { idSchema, titleSchema, materialKind } from './domain/books.js'
 import { BookError, hash } from './domain/books.js'
 import { MaterialCatalog } from './host/material-catalog.js'
 import { BookSearch } from './host/book-search.js'
+import { CandidateInboxStore } from './host/candidate-inbox.js'
+import type { CandidateInboxQuery, CandidateInbox, SuggestionDismissal } from './types.js'
 import type { BookSearchRequest, BookSearchResult, DocumentPreviewRequest, DocumentPreview } from './types.js'
 import type { UpgradeBookRequest, MaterialMetadataRequest, MaterialSearchRequest, MaterialSearchResult, MaterialReferences, SelectionMaterialRequest } from './types.js'
 import type { MaterialBatchRequest, MaterialBatchPreview, FormDraftQuery, FormDraftRequest, FormDraftVersionQuery, SettleFormDraftRequest } from './types.js'
@@ -358,6 +360,28 @@ export class SuperNovel extends TypertRemoteService {
     return await storageResult(async () => {
       const { kind, ...request } = input, scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
       return await (await DraftStore.formsAt(scope.root, scope.workspaceId, scope.store, kind)).settle(request, signal)
+    })
+  }
+
+  /** Read canonical pending candidates in one selected library without a model call. */
+  @Remote
+  async candidateInbox(sessionId: string, request: CandidateInboxQuery, signal: AbortSignal): Promise<CandidateInbox> {
+    return await storageResult(async () => {
+      const scope = await this.backupScope(sessionId, request.workspaceId, false, signal)
+      return await (await CandidateInboxStore.at(scope.root, scope.workspaceId, scope.store)).query(request, signal)
+    })
+  }
+
+  @Remote
+  async dismissSuggestion(sessionId: string, input: SuggestionDismissal, signal: AbortSignal): Promise<IntentSuggestion | StoryStateSuggestion> {
+    return await storageResult(async () => {
+      const request = z.strictObject({ workspaceId: z.string().regex(/^[a-f\d]{64}$/), bookId: idSchema, proposalId: idSchema,
+        kind: z.enum(['intent', 'story']), expectedCandidateHash: z.string().regex(/^[a-f\d]{64}$/) }).parse(input)
+      const scope = await this.backupScope(sessionId, request.workspaceId, true, signal)
+      const store = request.kind === 'intent' ? await IntentStore.at(scope.root, scope.workspaceId, scope.store) : await StoryStore.at(scope.root, scope.workspaceId, scope.store)
+      const value = await store.dismiss(request.bookId, request.proposalId, request.expectedCandidateHash, signal)
+      this.scheduleBackup(scope.root, request.bookId, sessionId)
+      return value
     })
   }
 

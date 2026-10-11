@@ -119,6 +119,9 @@ export const styles = `
 .sn-story-form .sn-input,.sn-story-form .sn-select { margin:6px 0; }
 .sn-story-form { border:0; margin:0; padding:0; min-width:0; }
 .sn-material-form{border:0;margin:0;padding:0;min-width:0}
+.sn-candidate-inbox>.sn-row{flex-wrap:wrap}
+.sn-candidate-inbox .sn-review-issue h3{margin:6px 0;overflow-wrap:anywhere}
+.sn-inbox-excerpt{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere;white-space:pre-wrap;margin:8px 0}
 .sn-material-list-row{display:flex;align-items:center;gap:8px;min-width:0}
 .sn-material-list-row>button{flex:1;min-width:0;white-space:normal}
 .sn-material-filters,.sn-saved-views,.sn-maintenance,.sn-material-organize,.sn-form-recovery{margin:10px 0}

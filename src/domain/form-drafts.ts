@@ -14,7 +14,7 @@ const thread = z.strictObject({ kind: z.literal('foreshadow'), foreshadowId: idS
   status: z.enum(['planned', 'planted', 'unresolved', 'resolved']), planted: evidenceSchema.optional(), resolved: evidenceSchema.optional() })
 const envelope = z.discriminatedUnion('kind', [
   z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('material'), base: materialFormSchema, form: materialFormSchema }),
-  z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('story'), base: z.int().nonnegative(), form: z.discriminatedUnion('kind', [event, thread]) }),
+  z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('story'), base: z.int().nonnegative(), sourceProposalId: idSchema.optional(), form: z.discriminatedUnion('kind', [event, thread]) }),
 ])
 
 /** Drafts allow unfinished fields, but cannot masquerade as confirmed metadata or evidence. */

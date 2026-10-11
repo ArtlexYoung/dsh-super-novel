@@ -44,6 +44,8 @@ export async function checkMaterialLibrary(page, output) {
   assert.equal(material.sourceEvidence.chapterId, chapterId); assert.deepEqual(material.tags, ['渡口', '线索']); assert.equal(material.favorite, true)
   assert.equal(await readFile(join(output, 'workspace', 'novels', bookId, 'chapters', `${chapterId}.md`), 'utf8'), '林舟手里握着一把铜钥匙。')
   await panel.getByRole('button', { name: 'AI organization candidate', exact: true }).click()
+  await panel.getByRole('heading', { name: 'Check material generation scope', exact: true }).waitFor()
+  await panel.getByRole('button', { name: 'Confirm scope and generate once', exact: true }).click()
   await page.locator('#sn-panel-revisions').waitFor(); await page.getByRole('button', { name: 'Accept', exact: true }).waitFor()
   await writeFile(join(output, 'library-validation.json'), JSON.stringify({ result: 'PASS', backupBeforeMigration: true, sourceEvidence: true, fulltext: true, tagsFavorite: true, trashRestore: true, aiCandidate: true }, null, 2))
   console.log('PASS material library: backup/migration, source selection, fulltext, tags/favorite, trash/restore and AI candidate.')

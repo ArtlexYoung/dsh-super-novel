@@ -4,7 +4,7 @@ import { Button, IconCheckOutline16, IconCloseOutline16, IconSparkle16 } from '.
 import { unwrap } from './books.js'
 import { materialInstruction, materialSources } from './materials.js'
 
-export function Proposals({ api, sessionId, book, chapterId, entry, writable, dirty, selection, t, revisionHint, preferredProposal, writingAction, openIntent, adopted }) {
+export function Proposals({ api, sessionId, book, chapterId, entry, writable, dirty, selection, t, revisionHint, preferredProposal, writingAction, backToInbox, openIntent, adopted }) {
   const target = book.chapters.find(item => item.chapterId === chapterId)
   const planning = target?.kind && target.kind !== 'chapter'
   const [items, setItems] = useState([])
@@ -130,6 +130,7 @@ export function Proposals({ api, sessionId, book, chapterId, entry, writable, di
     (!needsSelection || selection.end > selection.start) && !running && (!useIntent || !!intent) && (!useFacts || factState?.state === 'complete')
   const incomplete = view?.state === 'interrupted'
   return <section className="sn-proposals" data-loaded={loaded} aria-label={t(planning ? 'materialCandidates' : 'proposals')}>
+    {backToInbox && <Button size="sm" disabled={busy} onClick={backToInbox}>{t('inboxBack')}</Button>}
     <h3>{t(planning ? 'materialCandidates' : 'proposals')}</h3>
     <p className="sn-notice">{t('candidateHint')}</p>
     {!loaded && <p role="status" className="sn-notice">{t('loading')}</p>}

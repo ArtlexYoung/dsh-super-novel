@@ -133,7 +133,8 @@ test('AI suggestions stay unconfirmed, do not invent time, validate quotes and c
   await assert.rejects(f.store.suggest({...request,proposalId:randomUUID()},async()=>({replacement:JSON.stringify({events:[{title:'伪造',evidence:{start:0,end:2,quote:'伪造'},changes:[]}],foreshadows:[]}),complete:true,reason:'',usage:{state:'unknown'}}),signal()),reason('invalid-evidence'))
   await f.save({event:value.events[0]});assert.equal((await f.store.read(f.book.bookId)).events.length,1)
   await writeFile(join(f.root,'novels',f.book.bookId,'chapters',`${f.ids[0]}.md`),'外部改稿')
-  assert.equal((await f.store.suggestions(f.book.bookId,f.ids[0]))[0].state,'expired')
+  assert.equal((await f.store.suggestions(f.book.bookId,f.ids[0]))[0].state,'accepted')
+  assert.equal((await f.store.read(f.book.bookId)).events[0].state,'expired', 'confirmed evidence remains subject to source validation')
 })
 
 test('changed preceding selection expires facts and prose snapshots even when old source hashes remain unchanged', async t => {

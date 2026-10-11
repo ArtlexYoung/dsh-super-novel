@@ -67,9 +67,11 @@ export class FactStore {
     const expired = source.hash !== proposal.document.sourceHash || chapter.revision !== proposal.document.sourceRevision || source.externallyModified || (!receipt && source.book.revision !== proposal.request.expectedRevision)
     return { proposalId: proposal.request.proposalId, bookId: proposal.request.bookId, sourceChapterId: proposal.request.sourceChapterId,
       sourceRevision: proposal.document.sourceRevision, sourceHash: proposal.document.sourceHash, state: expired ? 'expired' : receipt ? 'accepted' : proposal.state,
-      reason: expired ? 'revision-conflict' : '', facts: proposal.document.facts, factsHash: hash(json(proposal.document)), createdAt: proposal.createdAt,
+      finalized: !!receipt || proposal.state === 'rejected', reason: expired ? 'revision-conflict' : '', facts: proposal.document.facts, factsHash: hash(json(proposal.document)), createdAt: proposal.createdAt,
       ...(proposal.document.summary ? { summary: proposal.document.summary } : {}), usage: proposal.usage as GenerationUsage, elapsedMs: proposal.elapsedMs, coverage: proposal.document.coverage }
   }
+  async proposal(bookId: string, proposalId: string): Promise<FactProposal> { return await this.view(await this.read(bookId, proposalId)) }
+
   async list(bookId: string, sourceChapterId: string): Promise<FactProposal[]> {
     idSchema.parse(sourceChapterId)
     const folder = await this.files.path(this.folder(bookId)); let names: string[]

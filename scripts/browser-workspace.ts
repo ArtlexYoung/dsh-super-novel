@@ -54,6 +54,11 @@ export async function selectBook(page, option) {
 }
 
 export async function openDirectory(page) {
+  // Fullscreen exits resize the pane before ResizeObserver changes its layout.
+  await page.waitForFunction(() => {
+    const root = document.querySelector('.sn-books')
+    return root && root.dataset.compact === String(root.clientWidth < 760)
+  })
   const directory = page.locator('#sn-panel-directory')
   if (!await directory.isVisible() || await directory.getAttribute('inert') !== null) await page.locator('#sn-tab-directory').click()
   await page.locator('#sn-panel-directory').waitFor()
@@ -94,16 +99,23 @@ export async function openWritingTool(page, tool) {
 
 /** Resize the host's real sidebar using its exposed drag handle. */
 export async function resizeSidebar(page, width) {
+  await page.bringToFront()
   const handle = page.locator('[data-side="rightbar"]')
-  await handle.hover({ position: { x: 1, y: 20 } })
+  await handle.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
+  await handle.hover({ position: { x: 4, y: 50 } })
   const box = await handle.boundingBox()
   assert(box, 'Host right-sidebar resize handle must be available')
   const viewport = await page.evaluate(() => innerWidth)
   const current = await page.locator('.super-novel-setup').evaluate(element => element.clientWidth)
-  const x = box.x + 1, offset = x - (viewport - current)
-  await page.mouse.move(x, box.y + 20); await page.mouse.down()
-  await page.mouse.move(viewport - width + offset, box.y + 20, { steps: 8 }); await page.mouse.up()
+  const x = box.x + box.width / 2, offset = x - (viewport - current)
+  await page.mouse.move(x, box.y + 50); await page.mouse.down()
+  await page.waitForFunction(() => document.querySelector('[data-side="rightbar"]')?.hasAttribute('data-dragging'))
+  await page.mouse.move(viewport - width + offset, box.y + 50, { steps: 8 }); await page.mouse.up()
   await page.waitForFunction(width => Math.abs(document.querySelector('.super-novel-setup').clientWidth - width) < 3, width)
+  await page.waitForFunction(() => {
+    const root = document.querySelector('.sn-books')
+    return root && root.dataset.compact === String(root.clientWidth < 760)
+  })
 }
 
 export async function showContent(page) {

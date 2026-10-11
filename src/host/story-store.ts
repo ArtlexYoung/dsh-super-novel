@@ -10,7 +10,7 @@ import { BookStore } from './book-store.js'
 import type { TextGenerator } from './chapter-generator.js'
 
 const recordSchema = z.strictObject({ format: z.literal('super-novel-story-state'), version: z.literal(1), request: saveStorySchema, events: z.array(eventSchema).max(1000), foreshadows: z.array(foreshadowSchema).max(1000), updatedAt: z.int().nonnegative() })
-const suggestionSchema = z.strictObject({ format: z.literal('super-novel-story-suggestion'), version: z.literal(1), request: suggestStorySchema, sourceRevision: z.int().positive(), events: z.array(eventSchema).max(50), foreshadows: z.array(foreshadowSchema).max(50), createdAt: z.int().nonnegative(), elapsedMs: z.int().nonnegative(), usage: z.discriminatedUnion('state', [z.strictObject({ state: z.literal('unknown') }), z.strictObject({ state: z.literal('reported'), inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative(), cacheReadTokens: z.int().nonnegative().optional(), cacheWriteTokens: z.int().nonnegative().optional(), totalTokens: z.int().nonnegative().optional(), reasoningTokens: z.int().nonnegative().optional() })]) })
+const suggestionSchema = z.strictObject({ format: z.literal('super-novel-story-suggestion'), version: z.literal(1), request: suggestStorySchema, sourceRevision: z.int().positive(), rejected: z.boolean().optional(), events: z.array(eventSchema).max(50), foreshadows: z.array(foreshadowSchema).max(50), createdAt: z.int().nonnegative(), elapsedMs: z.int().nonnegative(), usage: z.discriminatedUnion('state', [z.strictObject({ state: z.literal('unknown') }), z.strictObject({ state: z.literal('reported'), inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative(), cacheReadTokens: z.int().nonnegative().optional(), cacheWriteTokens: z.int().nonnegative().optional(), totalTokens: z.int().nonnegative().optional(), reasoningTokens: z.int().nonnegative().optional() })]) })
 type Ledger = { version: number; events: StoryEvent[]; foreshadows: Foreshadow[] }
 type Suggestion = z.infer<typeof suggestionSchema>
 
@@ -89,6 +89,10 @@ export class StoryStore {
       const book = await this.books.readBook(request.bookId), current = await this.ledger(request.bookId)
       if (book.recoveryRequired) throw new BookError('recovery-required')
       if (book.revision !== request.expectedRevision || current.version !== request.expectedVersion) throw new BookError('revision-conflict')
+      if (request.sourceProposalId) {
+        const suggestion = await this.suggestion(request.bookId, request.sourceProposalId)
+        if (suggestion.state !== 'review' || request.event && !suggestion.events.some(item => item.eventId === request.event!.eventId) || request.foreshadow && !suggestion.foreshadows.some(item => item.foreshadowId === request.foreshadow!.foreshadowId)) throw new BookError('proposal-stale')
+      }
       if (current.version >= 100_000) throw new BookError('too-large')
       if (request.event) { await this.requireEvidence(request.bookId, request.event.evidence); this.validateCharacters(book, request.event); current.events = [...current.events.filter(item => item.eventId !== request.event!.eventId), request.event] }
       if (request.foreshadow) {
@@ -142,11 +146,29 @@ export class StoryStore {
     return value
   }
   private async suggestionView(value: Suggestion): Promise<StoryStateSuggestion> {
-    const source = await this.books.readChapter(value.request.bookId, value.request.chapterId)
+    const source = await this.books.readChapter(value.request.bookId, value.request.chapterId), ledger = await this.ledger(value.request.bookId)
+    const accepted = value.events.length + value.foreshadows.length > 0 && value.events.every(item => ledger.events.some(record => record.eventId === item.eventId)) && value.foreshadows.every(item => ledger.foreshadows.some(record => record.foreshadowId === item.foreshadowId))
     return { proposalId: value.request.proposalId, bookId: value.request.bookId, chapterId: value.request.chapterId, sourceHash: value.request.expectedHash, events: value.events, foreshadows: value.foreshadows, createdAt: value.createdAt, usage: value.usage, elapsedMs: value.elapsedMs,
-      state: source.hash === value.request.expectedHash && !source.externallyModified && !source.book.recoveryRequired && value.sourceRevision === source.book.chapters.find(chapter => chapter.chapterId === value.request.chapterId)!.revision &&
+      candidateHash: hash(json({ events: value.events, foreshadows: value.foreshadows })), state: accepted ? 'accepted' : value.rejected ? 'rejected' : source.hash === value.request.expectedHash && !source.externallyModified && !source.book.recoveryRequired && value.sourceRevision === source.book.chapters.find(chapter => chapter.chapterId === value.request.chapterId)!.revision &&
         value.events.every(item => item.evidence.quote === source.content.slice(item.evidence.start, item.evidence.end) && item.changes.every(change => source.book.chapters.some(chapter => chapter.chapterId === change.characterId && chapter.kind === 'character' && availableDocument(chapter)))) &&
         value.foreshadows.every(item => item.planted!.quote === source.content.slice(item.planted!.start, item.planted!.end)) ? 'review' : 'expired' }
+  }
+  async suggestion(bookId: string, proposalId: string): Promise<StoryStateSuggestion> {
+    const file = await this.files.read(this.suggestionPath(bookId, proposalId))
+    if (!file.exists) throw new BookError('proposal-not-found')
+    return await this.suggestionView(this.parseSuggestion(file.text, bookId, proposalId))
+  }
+  async dismiss(bookId: string, proposalId: string, expectedHash: string, signal: AbortSignal): Promise<StoryStateSuggestion> {
+    return await this.files.lock(join('novels', idSchema.parse(bookId), '.story.lock'), async () => {
+      signal.throwIfAborted()
+      const path = this.suggestionPath(bookId, proposalId), file = await this.files.read(path)
+      if (!file.exists) throw new BookError('proposal-not-found')
+      const value = this.parseSuggestion(file.text, bookId, proposalId), view = await this.suggestionView(value)
+      if (view.candidateHash !== expectedHash) throw new BookError('operation-conflict')
+      if (view.state === 'accepted') throw new BookError('proposal-finalized')
+      if (!value.rejected) { signal.throwIfAborted(); await this.files.replace(path, json({ ...value, rejected: true }), file) }
+      return await this.suggestion(bookId, proposalId)
+    })
   }
   async suggestions(bookId: string, chapterId: string): Promise<StoryStateSuggestion[]> {
     await this.books.readChapter(bookId, chapterId); const folder = join('novels', idSchema.parse(bookId), 'story-proposals'); let names: string[]
